@@ -6,6 +6,7 @@ import {
   ClockIcon,
   HashIcon,
   PlusIcon,
+  QuestionMarkIcon,
   SignOutIcon,
   TicketIcon,
   TrashIcon,
@@ -17,6 +18,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/modal";
 import { DeleteEventModal } from "@/components/delete-event-modal";
+import { UsageGuide } from "@/components/usage-guide";
 import {
   clearStoredIdentity,
   readStoredIdentity,
@@ -50,6 +52,7 @@ export function HomeApp() {
   const [submitting, setSubmitting] = useState(false);
   const [modal, setModal] = useState<"create" | "join" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EventSummary | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const signIn = useCallback(async (displayId: string) => {
     setError("");
@@ -115,7 +118,11 @@ export function HomeApp() {
 
   if (status === "signed-out" || !identity) {
     return (
-      <main className="grid min-h-[100dvh] place-items-center bg-[var(--page)] px-5 py-12">
+      <main className="relative grid min-h-[100dvh] place-items-center bg-[var(--page)] px-5 py-12">
+        <GuideButton
+          className="absolute right-5 top-5 sm:right-7 sm:top-7"
+          onClick={() => setGuideOpen(true)}
+        />
         <section className="w-full max-w-[430px]">
           <div className="mb-8">
             <Image
@@ -168,6 +175,7 @@ export function HomeApp() {
             </button>
           </form>
         </section>
+        {guideOpen ? <UsageGuide onClose={() => setGuideOpen(false)} /> : null}
       </main>
     );
   }
@@ -189,6 +197,7 @@ export function HomeApp() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <GuideButton onClick={() => setGuideOpen(true)} />
             <div className="hidden rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600 sm:block">
               {identity.displayId}
             </div>
@@ -341,7 +350,29 @@ export function HomeApp() {
           }}
         />
       ) : null}
+
+      {guideOpen ? <UsageGuide onClose={() => setGuideOpen(false)} /> : null}
     </main>
+  );
+}
+
+function GuideButton({
+  onClick,
+  className = "",
+}: {
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={`z-10 grid size-11 place-items-center rounded-full border border-slate-200/80 bg-white text-slate-400 shadow-[0_10px_30px_rgba(67,83,108,0.08)] transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600 active:scale-95 ${className}`}
+      onClick={onClick}
+      aria-label="打开使用指南"
+      title="使用指南"
+    >
+      <QuestionMarkIcon size={19} weight="bold" />
+    </button>
   );
 }
 
