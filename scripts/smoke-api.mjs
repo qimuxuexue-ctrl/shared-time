@@ -11,7 +11,7 @@ const supabase = createClient(
 );
 
 let identityId;
-let secondIdentityId;
+const otherIdentityIds = [];
 let eventId;
 
 async function post(path, body) {
@@ -48,21 +48,44 @@ try {
   eventId = createResult.event.id;
   console.log("event create: ok");
 
-  const secondIdentity = await post("/api/identity", {
-    id: `ctb-${Date.now()}`,
-  });
-  secondIdentityId = secondIdentity.identity.id;
-  console.log("second identity: ok");
+  for (const [index, tagName] of ["小林", "Mika", "阿雪"].entries()) {
+    const otherIdentity = await post("/api/identity", {
+      id: `ctb-${index}-${Date.now()}`,
+    });
+    otherIdentityIds.push(otherIdentity.identity.id);
 
-  const secondJoin = await post("/api/events/join", {
-    identityId: secondIdentityId,
-    shareCode: createResult.event.shareCode,
-    tagName: "Second tester",
-  });
-  if (secondJoin.alreadyJoined) {
-    throw new Error("Second identity was unexpectedly already joined.");
+    const join = await post("/api/events/join", {
+      identityId: otherIdentity.identity.id,
+      shareCode: createResult.event.shareCode,
+      tagName,
+    });
+    if (join.alreadyJoined) {
+      throw new Error("A new identity was unexpectedly already joined.");
+    }
   }
-  console.log("second member join: ok");
+  console.log("three additional members join: ok");
+
+  const earlyWeekday = new Date(`${createResult.event.startDate}T00:00:00Z`);
+  earlyWeekday.setUTCDate(earlyWeekday.getUTCDate() + 7);
+  const earlyWeekdayDate = earlyWeekday.toISOString().slice(0, 10);
+  const earlyHourResponse = await fetch(
+    `${baseUrl}/api/events/${createResult.event.shareCode}/availability`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        identityId,
+        updates: [
+          { date: earlyWeekdayDate, startHour: 10, available: true },
+        ],
+      }),
+    },
+  );
+  if (!earlyHourResponse.ok) {
+    const payload = await earlyHourResponse.json();
+    throw new Error(`Weekday 10:00 save failed: ${payload.error ?? earlyHourResponse.statusText}`);
+  }
+  console.log("weekday 10:00 availability: ok");
 
   const joinResult = await post("/api/events/join", {
     identityId,
@@ -77,19 +100,67 @@ try {
     `${baseUrl}/api/events?identityId=${encodeURIComponent(identityId)}`,
   );
   const eventsResult = await eventsResponse.json();
-  if (!eventsResponse.ok || eventsResult.events.length !== 1) {
+  if (
+    !eventsResponse.ok ||
+    eventsResult.events.length !== 1 ||
+    eventsResult.events[0].participantCount !== 4 ||
+    eventsResult.events[0].participants.length !== 4
+  ) {
     throw new Error("Event list returned an unexpected result.");
   }
-  console.log("event list: ok");
+  console.log("event list participant summary: ok");
 
   const workspaceResponse = await fetch(
     `${baseUrl}/api/events/${createResult.event.shareCode}?identityId=${encodeURIComponent(identityId)}&weekStart=${createResult.event.startDate}`,
   );
   const workspace = await workspaceResponse.json();
-  if (!workspaceResponse.ok || workspace.members.length !== 2) {
-    throw new Error("Workspace did not return both members.");
+  if (!workspaceResponse.ok || workspace.members.length !== 4) {
+    throw new Error("Workspace did not return all members.");
   }
   console.log("multi-member workspace: ok");
+
+  const deniedDelete = await fetch(
+    `${baseUrl}/api/events/${createResult.event.shareCode}`,
+    {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ identityId: otherIdentityIds[0] }),
+    },
+  );
+  if (deniedDelete.status !== 403) {
+    throw new Error("A non-creator was allowed to delete the event.");
+  }
+  console.log("non-creator delete denied: ok");
+
+  const creatorDelete = await fetch(
+    `${baseUrl}/api/events/${createResult.event.shareCode}`,
+    {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ identityId }),
+    },
+  );
+  if (!creatorDelete.ok) {
+    const payload = await creatorDelete.json();
+    throw new Error(`Creator delete failed: ${payload.error ?? creatorDelete.statusText}`);
+  }
+
+  const { count: remainingMembers } = await supabase
+    .from("event_members")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+  if (remainingMembers !== 0) {
+    throw new Error("Event members were not removed by cascade delete.");
+  }
+  const { count: remainingAvailability } = await supabase
+    .from("availabilities")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+  if (remainingAvailability !== 0) {
+    throw new Error("Availability was not removed by cascade delete.");
+  }
+  eventId = undefined;
+  console.log("creator delete and cascade cleanup: ok");
 } finally {
   if (eventId) {
     await supabase.from("events").delete().eq("id", eventId);
@@ -97,8 +168,8 @@ try {
   if (identityId) {
     await supabase.from("identities").delete().eq("id", identityId);
   }
-  if (secondIdentityId) {
-    await supabase.from("identities").delete().eq("id", secondIdentityId);
+  for (const otherIdentityId of otherIdentityIds) {
+    await supabase.from("identities").delete().eq("id", otherIdentityId);
   }
   console.log("test cleanup: ok");
 }

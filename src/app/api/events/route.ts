@@ -113,6 +113,14 @@ export async function POST(request: Request) {
           tagName: member.tag_name,
           tagColor: member.tag_color,
           isCreator: true,
+          participantCount: 1,
+          participants: [
+            {
+              id: member.id,
+              tagName: member.tag_name,
+              tagColor: member.tag_color,
+            },
+          ],
         },
       },
       { status: 201 },

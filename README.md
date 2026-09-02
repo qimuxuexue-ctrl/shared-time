@@ -1,6 +1,6 @@
-# Shared Time
+# Share timeline
 
-一个不需要注册账号的多人空闲时间预约工具。用户通过自定义 ID 找回自己的事件和 Tag，通过六位邀请码加入事件，并在北京时间周视图中标记空闲时间。
+一个不需要注册账号的多人空闲时间预约工具。用户通过自定义 ID/昵称找回自己的事件和 Tag，通过六位邀请码加入事件，并在北京时间 10:00–24:00 的周视图中标记空闲时间。事件创建者可以删除事件及其全部记录。
 
 ## 本地运行
 
@@ -27,6 +27,8 @@ SUPABASE_SECRET_KEY=sb_secret_your_key
 ## 数据库
 
 在 Supabase SQL Editor 中运行 [`supabase/schema.sql`](./supabase/schema.sql)。浏览器没有数据库直连权限，所有读写均经过 Next.js Route Handlers。
+
+已有数据库升级时，按文件名顺序运行 [`supabase/migrations`](./supabase/migrations) 中尚未执行的迁移。
 
 ## 验证
 

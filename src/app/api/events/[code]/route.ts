@@ -17,6 +17,10 @@ const querySchema = z.object({
     .optional(),
 });
 
+const deleteSchema = z.object({
+  identityId: z.uuid("身份 ID 不正确"),
+});
+
 export async function GET(
   request: Request,
   context: RouteContext<"/api/events/[code]">,
@@ -129,4 +133,56 @@ export async function GET(
       startHour: slot.start_hour,
     })),
   });
+}
+
+export async function DELETE(
+  request: Request,
+  context: RouteContext<"/api/events/[code]">,
+) {
+  const { code: rawCode } = await context.params;
+  const code = rawCode.trim().toUpperCase();
+
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return Response.json({ error: "邀请码格式不正确" }, { status: 400 });
+  }
+
+  const payload = await request.json().catch(() => null);
+  const parsed = deleteSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return validationError(parsed.error);
+  }
+
+  const { data: event, error: eventError } = await supabaseAdmin
+    .from("events")
+    .select("id, creator_identity_id")
+    .eq("share_code", code)
+    .maybeSingle<{ id: string; creator_identity_id: string }>();
+
+  if (eventError) {
+    return serverError();
+  }
+
+  if (!event) {
+    return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
+  }
+
+  if (event.creator_identity_id !== parsed.data.identityId) {
+    return Response.json(
+      { error: "只有事件创建者可以删除这个事件" },
+      { status: 403 },
+    );
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from("events")
+    .delete()
+    .eq("id", event.id)
+    .eq("creator_identity_id", parsed.data.identityId);
+
+  if (deleteError) {
+    return serverError("删除事件失败，请稍后重试");
+  }
+
+  return Response.json({ ok: true });
 }

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "一起找时间",
+  title: "Share timeline",
   description: "用一个简单的共享时间表，找到大家都有空的时间。",
 };
 

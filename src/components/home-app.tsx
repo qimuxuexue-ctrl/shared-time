@@ -8,11 +8,14 @@ import {
   PlusIcon,
   SignOutIcon,
   TicketIcon,
+  TrashIcon,
+  UsersThreeIcon,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/modal";
+import { DeleteEventModal } from "@/components/delete-event-modal";
 import {
   clearStoredIdentity,
   readStoredIdentity,
@@ -45,6 +48,7 @@ export function HomeApp() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [modal, setModal] = useState<"create" | "join" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EventSummary | null>(null);
 
   const signIn = useCallback(async (displayId: string) => {
     setError("");
@@ -117,10 +121,10 @@ export function HomeApp() {
               <CalendarBlankIcon size={24} weight="fill" />
             </div>
             <h1 className="text-4xl font-semibold tracking-[-0.04em] text-slate-950">
-              一起找时间
+              Share timeline
             </h1>
             <p className="mt-3 max-w-sm text-base leading-7 text-slate-500">
-              输入一个只属于你的 ID。下次回来，仍然可以找到原来的事件和 Tag。
+              输入一个只属于你的 ID/昵称*。下次回来，仍然可以通过输入ID/昵称找到原来的事件和 Tag。
             </p>
           </div>
 
@@ -132,7 +136,7 @@ export function HomeApp() {
             className="rounded-[22px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_60px_rgba(67,83,108,0.08)] sm:p-6"
           >
             <label htmlFor="identity-id" className="field-label">
-              你的 ID
+              你的 ID/昵称
             </label>
             <input
               id="identity-id"
@@ -171,7 +175,7 @@ export function HomeApp() {
               <CalendarBlankIcon size={19} weight="fill" />
             </div>
             <span className="text-base font-semibold tracking-tight text-slate-950">
-              一起找时间
+              Share timeline
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -221,34 +225,66 @@ export function HomeApp() {
         ) : (
           <section className="grid gap-4 md:grid-cols-2">
             {events.map((event) => (
-              <button
-                type="button"
+              <article
                 key={event.id}
-                onClick={() => router.push(`/e/${event.shareCode}`)}
-                className="group rounded-[22px] border border-slate-200/80 bg-white p-5 text-left shadow-[0_14px_42px_rgba(67,83,108,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)] active:translate-y-0"
+                className="group relative rounded-[22px] border border-slate-200/80 bg-white shadow-[0_14px_42px_rgba(67,83,108,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)]"
               >
-                <div className="mb-7 flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-                      {event.name}
-                    </h2>
-                    <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
-                      <HashIcon size={14} weight="bold" />
-                      {event.shareCode}
-                    </p>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/e/${event.shareCode}`)}
+                  className="w-full rounded-[22px] p-5 text-left active:bg-slate-50/70"
+                >
+                  <div className={`mb-6 flex items-start justify-between gap-4 ${event.isCreator ? "pr-10" : ""}`}>
+                    <div className="min-w-0">
+                      <h2 className="truncate text-xl font-semibold tracking-tight text-slate-950">
+                        {event.name}
+                      </h2>
+                      <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
+                        <HashIcon size={14} weight="bold" />
+                        {event.shareCode}
+                      </p>
+                    </div>
+                    <ArrowRightIcon size={20} weight="bold" className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
                   </div>
-                  <ArrowRightIcon size={20} weight="bold" className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span
-                    className="inline-flex max-w-[70%] items-center rounded-lg px-2.5 py-1.5 text-sm font-semibold"
-                    style={{ color: event.tagColor, backgroundColor: `${event.tagColor}14` }}
+                  <div className="flex min-h-7 items-end justify-between gap-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      {event.participants.slice(0, 3).map((participant) => (
+                        <span
+                          key={participant.id}
+                          className="max-w-28 truncate rounded-lg px-2.5 py-1.5 text-sm font-semibold"
+                          style={{
+                            color: participant.tagColor,
+                            backgroundColor: `${participant.tagColor}14`,
+                          }}
+                        >
+                          {participant.tagName}
+                        </span>
+                      ))}
+                      {event.participantCount > 3 ? (
+                        <span className="px-1 text-sm font-semibold text-slate-400">…</span>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1 text-sm text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <UsersThreeIcon size={15} weight="bold" />
+                        {event.participantCount} 人参加
+                      </span>
+                      <span>{event.weeksAhead} 周</span>
+                    </div>
+                  </div>
+                </button>
+                {event.isCreator ? (
+                  <button
+                    type="button"
+                    className="absolute right-[3.45rem] top-4 grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600 active:scale-95"
+                    onClick={() => setDeleteTarget(event)}
+                    aria-label={`删除事件 ${event.name}`}
+                    title="删除事件"
                   >
-                    {event.tagName}
-                  </span>
-                  <span className="text-sm text-slate-400">{event.weeksAhead} 周</span>
-                </div>
-              </button>
+                    <TrashIcon size={18} weight="bold" />
+                  </button>
+                ) : null}
+              </article>
             ))}
           </section>
         )}
@@ -274,6 +310,20 @@ export function HomeApp() {
             setEvents((current) => [joined, ...current.filter((item) => item.id !== joined.id)]);
             setModal(null);
             router.push(`/e/${joined.shareCode}`);
+          }}
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <DeleteEventModal
+          identity={identity}
+          event={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => {
+            setEvents((current) =>
+              current.filter((event) => event.id !== deleteTarget.id),
+            );
+            setDeleteTarget(null);
           }}
         />
       ) : null}

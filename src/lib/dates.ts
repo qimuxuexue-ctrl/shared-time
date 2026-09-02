@@ -39,10 +39,7 @@ export function getIsoDay(dateString: string) {
 }
 
 export function isValidEventHour(dateString: string, startHour: number) {
-  const isoDay = getIsoDay(dateString);
-  return isoDay <= 5
-    ? startHour >= 19 && startHour <= 23
-    : startHour >= 10 && startHour <= 23;
+  return isValidDateString(dateString) && startHour >= 10 && startHour <= 23;
 }
 
 export function isPastSlot(

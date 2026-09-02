@@ -64,18 +64,15 @@ create table if not exists public.availabilities (
     references public.event_members(id, event_id)
     on delete cascade,
   constraint availabilities_slot_unique unique (member_id, slot_date, start_hour),
-  constraint availabilities_valid_hour check (
-    (
-      extract(isodow from slot_date) between 1 and 5
-      and start_hour between 19 and 23
-    )
-    or
-    (
-      extract(isodow from slot_date) between 6 and 7
-      and start_hour between 10 and 23
-    )
-  )
+  constraint availabilities_valid_hour check (start_hour between 10 and 23)
 );
+
+alter table public.availabilities
+  drop constraint if exists availabilities_valid_hour;
+
+alter table public.availabilities
+  add constraint availabilities_valid_hour
+  check (start_hour between 10 and 23);
 
 create index if not exists events_creator_identity_idx
   on public.events(creator_identity_id);
@@ -115,4 +112,3 @@ grant all on table public.identities to service_role;
 grant all on table public.events to service_role;
 grant all on table public.event_members to service_role;
 grant all on table public.availabilities to service_role;
-

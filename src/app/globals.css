@@ -68,6 +68,7 @@ button:disabled {
 
   .primary-button:active:not(:disabled),
   .secondary-button:active:not(:disabled),
+  .danger-button:active:not(:disabled),
   .icon-button:active:not(:disabled) {
     transform: scale(0.98);
   }
@@ -96,6 +97,30 @@ button:disabled {
   .secondary-button:hover:not(:disabled) {
     border-color: #cbd3df;
     background: #f8fafc;
+  }
+
+  .danger-button {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 12px;
+    background: #dc2626;
+    padding: 0.7rem 1rem;
+    color: white;
+    font-size: 0.925rem;
+    font-weight: 650;
+    transition: transform 160ms ease, background-color 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .danger-button:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+
+  .danger-button:disabled {
+    opacity: 0.5;
   }
 
   .icon-button {

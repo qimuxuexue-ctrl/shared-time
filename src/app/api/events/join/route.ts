@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { pickTagColor } from "@/lib/events";
+import { getEventParticipants, pickTagColor } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
   }
 
   if (existingMember) {
+    const participants = await getEventParticipants(event.id);
     return Response.json({
       event: {
         id: event.id,
@@ -77,6 +78,8 @@ export async function POST(request: Request) {
         tagName: existingMember.tag_name,
         tagColor: existingMember.tag_color,
         isCreator: event.creator_identity_id === identityId,
+        participantCount: participants.length,
+        participants,
       },
       alreadyJoined: true,
     });
@@ -101,6 +104,8 @@ export async function POST(request: Request) {
     return serverError("加入事件失败，请稍后重试");
   }
 
+  const participants = await getEventParticipants(event.id);
+
   return Response.json(
     {
       event: {
@@ -115,6 +120,8 @@ export async function POST(request: Request) {
         tagName: member.tag_name,
         tagColor: member.tag_color,
         isCreator: event.creator_identity_id === identityId,
+        participantCount: participants.length,
+        participants,
       },
       alreadyJoined: false,
     },

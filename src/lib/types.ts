@@ -3,6 +3,12 @@ export type Identity = {
   displayId: string;
 };
 
+export type EventParticipantSummary = {
+  id: string;
+  tagName: string;
+  tagColor: string;
+};
+
 export type EventSummary = {
   id: string;
   shareCode: string;
@@ -15,6 +21,8 @@ export type EventSummary = {
   tagName: string;
   tagColor: string;
   isCreator: boolean;
+  participantCount: number;
+  participants: EventParticipantSummary[];
 };
 
 export type EventMember = {
@@ -47,4 +55,3 @@ export type EventWorkspaceData = {
   members: EventMember[];
   availability: AvailabilitySlot[];
 };
-

@@ -9,9 +9,11 @@ import {
   ClockIcon,
   CopyIcon,
   HashIcon,
+  TrashIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -19,11 +21,11 @@ import {
   useState,
 } from "react";
 
+import { DeleteEventModal } from "@/components/delete-event-modal";
 import { readStoredIdentity } from "@/lib/browser-identity";
 import {
   addDaysToDateString,
   getBeijingDateString,
-  getIsoDay,
   getMondayDateString,
   isPastSlot,
   isValidEventHour,
@@ -88,6 +90,7 @@ function applyUpdates(
 }
 
 export function EventWorkspace({ code }: { code: string }) {
+  const router = useRouter();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [data, setData] = useState<EventWorkspaceData | null>(null);
   const [weekStart, setWeekStart] = useState(() =>
@@ -99,6 +102,7 @@ export function EventWorkspace({ code }: { code: string }) {
   const [missingIdentity, setMissingIdentity] = useState(false);
   const [openPresetDay, setOpenPresetDay] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadWorkspace = useCallback(
     async (activeIdentity: Identity, requestedWeek: string, silent = false) => {
@@ -307,18 +311,30 @@ export function EventWorkspace({ code }: { code: string }) {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            className="secondary-button shrink-0"
-            onClick={async () => {
-              await navigator.clipboard.writeText(window.location.href);
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1600);
-            }}
-          >
-            {copied ? <CheckIcon size={18} weight="bold" /> : <CopyIcon size={18} weight="bold" />}
-            <span className="hidden sm:inline">{copied ? "已复制" : "分享事件"}</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {data.event.isCreator ? (
+              <button
+                type="button"
+                className="secondary-button text-red-600 hover:border-red-200 hover:bg-red-50"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <TrashIcon size={18} weight="bold" />
+                <span className="hidden sm:inline">删除事件</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(window.location.href);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1600);
+              }}
+            >
+              {copied ? <CheckIcon size={18} weight="bold" /> : <CopyIcon size={18} weight="bold" />}
+              <span className="hidden sm:inline">{copied ? "已复制" : "分享事件"}</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -461,6 +477,15 @@ export function EventWorkspace({ code }: { code: string }) {
           </section>
         </div>
       </div>
+
+      {showDeleteConfirm && identity ? (
+        <DeleteEventModal
+          identity={identity}
+          event={data.event}
+          onClose={() => setShowDeleteConfirm(false)}
+          onDeleted={() => router.replace("/")}
+        />
+      ) : null}
     </main>
   );
 }
@@ -474,28 +499,20 @@ function PresetMenu({
   onApply: (date: string, start: number, end: number) => void;
   onClear: (date: string) => void;
 }) {
-  const weekend = getIsoDay(date) >= 6;
-  const presets = weekend
-    ? [
-        ["上午", 10, 12],
-        ["中午", 12, 14],
-        ["下午", 14, 18],
-        ["晚上", 18, 24],
-        ["全天", 10, 24],
-        ["10:00-12:00", 10, 12],
-        ["12:00-14:00", 12, 14],
-        ["14:00-16:00", 14, 16],
-        ["16:00-18:00", 16, 18],
-        ["18:00-20:00", 18, 20],
-        ["20:00-22:00", 20, 22],
-        ["22:00-24:00", 22, 24],
-      ] as const
-    : [
-        ["19:00-21:00", 19, 21],
-        ["20:00-22:00", 20, 22],
-        ["21:00-23:00", 21, 23],
-        ["全部 19:00-24:00", 19, 24],
-      ] as const;
+  const presets = [
+    ["上午", 10, 12],
+    ["中午", 12, 14],
+    ["下午", 14, 18],
+    ["晚上", 18, 24],
+    ["全天", 10, 24],
+    ["10:00-12:00", 10, 12],
+    ["12:00-14:00", 12, 14],
+    ["14:00-16:00", 14, 16],
+    ["16:00-18:00", 16, 18],
+    ["18:00-20:00", 18, 20],
+    ["20:00-22:00", 20, 22],
+    ["22:00-24:00", 22, 24],
+  ] as const;
 
   return (
     <div className="absolute left-1/2 top-[52px] z-30 w-52 -translate-x-1/2 rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-[0_18px_55px_rgba(49,65,88,0.18)]">
