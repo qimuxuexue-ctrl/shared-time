@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 
+import { getBeijingDateString, getMondayDateString } from "@/lib/dates";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const SHARE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -19,6 +20,7 @@ type JoinedEvent = {
   name: string;
   start_date: string;
   weeks_ahead: number;
+  event_type: "one_time" | "ongoing";
   status: "active" | "closed" | "archived";
   creator_identity_id: string;
   created_at: string;
@@ -46,6 +48,29 @@ export function pickTagColor(identityId: string) {
   return TAG_COLORS[score % TAG_COLORS.length];
 }
 
+export function isExpiredOneTimeEvent(event: {
+  event_type: "one_time" | "ongoing";
+  start_date: string;
+}) {
+  return (
+    event.event_type === "one_time" &&
+    event.start_date < getMondayDateString(getBeijingDateString())
+  );
+}
+
+export async function cleanupExpiredOneTimeEvents() {
+  const currentWeekStart = getMondayDateString(getBeijingDateString());
+  const { error } = await supabaseAdmin
+    .from("events")
+    .delete()
+    .eq("event_type", "one_time")
+    .lt("start_date", currentWeekStart);
+
+  if (error) {
+    throw new Error("Unable to clean up expired events.");
+  }
+}
+
 export async function getEventParticipants(eventId: string) {
   const { data, error } = await supabaseAdmin
     .from("event_members")
@@ -65,10 +90,12 @@ export async function getEventParticipants(eventId: string) {
 }
 
 export async function getIdentityEvents(identityId: string) {
+  await cleanupExpiredOneTimeEvents();
+
   const { data, error } = await supabaseAdmin
     .from("event_members")
     .select(
-      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, status, creator_identity_id, created_at)",
+      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at)",
     )
     .eq("identity_id", identityId);
 
@@ -117,6 +144,7 @@ export async function getIdentityEvents(identityId: string) {
         name: event.name,
         startDate: event.start_date,
         weeksAhead: event.weeks_ahead,
+        eventType: event.event_type,
         status: event.status,
         createdAt: event.created_at,
         memberId: membership.id,

@@ -21,7 +21,7 @@ import {
   readStoredIdentity,
   storeIdentity,
 } from "@/lib/browser-identity";
-import type { EventSummary, Identity } from "@/lib/types";
+import type { EventSummary, EventType, Identity } from "@/lib/types";
 
 type IdentityResponse = {
   identity: Identity;
@@ -234,7 +234,7 @@ export function HomeApp() {
                   onClick={() => router.push(`/e/${event.shareCode}`)}
                   className="w-full rounded-[22px] p-5 text-left active:bg-slate-50/70"
                 >
-                  <div className={`mb-6 flex items-start justify-between gap-4 ${event.isCreator ? "pr-10" : ""}`}>
+                  <div className={`mb-6 ${event.isCreator ? "pr-20" : "pr-9"}`}>
                     <div className="min-w-0">
                       <h2 className="truncate text-xl font-semibold tracking-tight text-slate-950">
                         {event.name}
@@ -244,7 +244,6 @@ export function HomeApp() {
                         {event.shareCode}
                       </p>
                     </div>
-                    <ArrowRightIcon size={20} weight="bold" className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
                   </div>
                   <div className="flex min-h-7 items-end justify-between gap-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -269,14 +268,19 @@ export function HomeApp() {
                         <UsersThreeIcon size={15} weight="bold" />
                         {event.participantCount} 人参加
                       </span>
-                      <span>{event.weeksAhead} 周</span>
+                      <span>{event.eventType === "one_time" ? "一次性" : "常驻"}</span>
                     </div>
                   </div>
+                  <ArrowRightIcon
+                    size={20}
+                    weight="bold"
+                    className="pointer-events-none absolute right-4 top-[1.35rem] text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]"
+                  />
                 </button>
                 {event.isCreator ? (
                   <button
                     type="button"
-                    className="absolute right-[3.45rem] top-4 grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600 active:scale-95"
+                    className="absolute right-11 top-3.5 z-10 grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600 active:scale-95"
                     onClick={() => setDeleteTarget(event)}
                     aria-label={`删除事件 ${event.name}`}
                     title="删除事件"
@@ -334,7 +338,7 @@ export function HomeApp() {
 function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity; onClose: () => void; onCreated: (event: EventSummary) => void }) {
   const [name, setName] = useState("");
   const [tagName, setTagName] = useState(identity.displayId);
-  const [weeksAhead, setWeeksAhead] = useState(4);
+  const [eventType, setEventType] = useState<EventType>("one_time");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -346,7 +350,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
       const response = await fetch("/api/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identityId: identity.id, name, tagName, weeksAhead }),
+        body: JSON.stringify({ identityId: identity.id, name, tagName, eventType }),
       });
       const payload = await readJson<{ event: EventSummary }>(response);
       onCreated(payload.event);
@@ -369,13 +373,14 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           <input id="create-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} maxLength={24} />
         </div>
         <div>
-          <label htmlFor="weeks-ahead" className="field-label">可预约范围</label>
-          <select id="weeks-ahead" className="text-input" value={weeksAhead} onChange={(event) => setWeeksAhead(Number(event.target.value))}>
-            <option value={2}>未来 2 周</option>
-            <option value={4}>未来 4 周</option>
-            <option value={8}>未来 8 周</option>
-            <option value={12}>未来 12 周</option>
+          <label htmlFor="event-type" className="field-label">事件类型</label>
+          <select id="event-type" className="text-input" value={eventType} onChange={(event) => setEventType(event.target.value as EventType)}>
+            <option value="one_time">一次性事件 · 仅本周</option>
+            <option value="ongoing">常驻事件 · 可持续预约</option>
           </select>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            一次性事件在本周结束后自动清理；常驻事件可以一直向后预约。
+          </p>
         </div>
         {error ? <p className="form-error">{error}</p> : null}
         <button type="submit" className="primary-button w-full" disabled={submitting || !name.trim() || !tagName.trim()}>

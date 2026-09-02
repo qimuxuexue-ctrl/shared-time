@@ -48,7 +48,7 @@ export function DeleteEventModal({
       <div className="mb-5 flex items-start gap-3 rounded-xl bg-red-50 p-3.5 text-red-800">
         <WarningCircleIcon className="mt-0.5 shrink-0" size={20} weight="fill" />
         <p className="text-sm leading-6">
-          删除「{event.name}」后，所有参与者、Tag 和已选择的时间都会永久清空。
+          删除「{event.name}」后，只会清空本事件中的 Tag、备注和已选择的时间。参与者的 ID/昵称及其他事件不会受到影响。
         </p>
       </div>
       {error ? <p className="form-error mb-4">{error}</p> : null}

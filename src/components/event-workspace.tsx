@@ -9,6 +9,9 @@ import {
   ClockIcon,
   CopyIcon,
   HashIcon,
+  NotePencilIcon,
+  PencilSimpleIcon,
+  PlusIcon,
   TrashIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react";
@@ -33,6 +36,7 @@ import {
 import type {
   AvailabilitySlot,
   EventMember,
+  EventNote,
   EventWorkspaceData,
   Identity,
 } from "@/lib/types";
@@ -103,6 +107,10 @@ export function EventWorkspace({ code }: { code: string }) {
   const [openPresetDay, setOpenPresetDay] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState("");
 
   const loadWorkspace = useCallback(
     async (activeIdentity: Identity, requestedWeek: string, silent = false) => {
@@ -194,6 +202,11 @@ export function EventWorkspace({ code }: { code: string }) {
     return map;
   }, [data?.availability, membersById]);
 
+  const ownNote = useMemo(
+    () => data?.notes.find((note) => note.isCurrent) ?? null,
+    [data?.notes],
+  );
+
   const saveUpdates = async (updates: SlotUpdate[]) => {
     if (!identity || !data || updates.length === 0) return;
 
@@ -266,6 +279,56 @@ export function EventWorkspace({ code }: { code: string }) {
     void saveUpdates(updates);
   };
 
+  const beginNoteEditing = () => {
+    setNoteDraft(ownNote?.content ?? "");
+    setNoteError("");
+    setEditingNote(true);
+  };
+
+  const saveNote = async () => {
+    if (!identity || !data || !noteDraft.trim()) return;
+    setNoteSaving(true);
+    setNoteError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}/notes`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identityId: identity.id,
+          content: noteDraft,
+        }),
+      });
+      const payload = (await response.json()) as {
+        note?: EventNote;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.note) {
+        throw new Error(payload.error ?? "保存备注失败");
+      }
+
+      const savedNote = payload.note;
+      setData((current) => {
+        if (!current) return current;
+        const hasOwnNote = current.notes.some((note) => note.isCurrent);
+        return {
+          ...current,
+          notes: hasOwnNote
+            ? current.notes.map((note) =>
+                note.isCurrent ? savedNote : note,
+              )
+            : [...current.notes, savedNote],
+        };
+      });
+      setEditingNote(false);
+    } catch (caught) {
+      setNoteError(caught instanceof Error ? caught.message : "保存备注失败");
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
   if (missingIdentity) {
     return <WorkspaceMessage title="需要先输入 ID" body="回到首页输入你的 ID，才能查看或加入这个事件。" />;
   }
@@ -287,11 +350,6 @@ export function EventWorkspace({ code }: { code: string }) {
   if (!data) {
     return <WorkspaceMessage title="无法打开事件" body={error || "请确认邀请码是否正确。"} />;
   }
-
-  const lastWeekStart = addDaysToDateString(
-    data.event.startDate,
-    (data.event.weeksAhead - 1) * 7,
-  );
 
   return (
     <main className="min-h-[100dvh] bg-[var(--page)] pb-12">
@@ -345,6 +403,9 @@ export function EventWorkspace({ code }: { code: string }) {
               <ClockIcon size={16} weight="bold" />
               北京时间 UTC+8
               {saving ? <span className="text-[var(--accent)]">正在保存</span> : null}
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                {data.event.eventType === "one_time" ? "一次性事件" : "常驻事件"}
+              </span>
             </p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
               {formatWeekRange(weekStart)}
@@ -363,7 +424,7 @@ export function EventWorkspace({ code }: { code: string }) {
             <button
               type="button"
               className="icon-button"
-              disabled={weekStart >= lastWeekStart}
+              disabled={data.event.eventType === "one_time"}
               onClick={() => setWeekStart(addDaysToDateString(weekStart, 7))}
               aria-label="下一周"
             >
@@ -374,7 +435,7 @@ export function EventWorkspace({ code }: { code: string }) {
 
         {error ? <p className="form-error mb-5">{error}</p> : null}
 
-        <div className="grid gap-5 lg:grid-cols-[230px_minmax(0,1fr)]">
+        <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
           <aside className="h-fit rounded-[18px] border border-slate-200/80 bg-white p-4 lg:sticky lg:top-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -395,6 +456,112 @@ export function EventWorkspace({ code }: { code: string }) {
             <p className="mt-4 text-xs leading-5 text-slate-500">
               点击格子添加或移除自己的 Tag。星期标题里可以快速选择整段时间。
             </p>
+
+            <section className="mt-5 border-t border-slate-100 pt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <NotePencilIcon size={18} weight="bold" />
+                  备注
+                </h2>
+                {!ownNote && !editingNote ? (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--accent)] transition hover:bg-blue-50"
+                    onClick={beginNoteEditing}
+                  >
+                    <PlusIcon size={13} weight="bold" />
+                    添加
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="space-y-3">
+                {data.notes.length === 0 && !editingNote ? (
+                  <p className="rounded-xl bg-slate-50 px-3 py-4 text-center text-xs leading-5 text-slate-400">
+                    还没有备注
+                  </p>
+                ) : null}
+
+                {data.notes.map((note) =>
+                  note.isCurrent && editingNote ? null : (
+                    <article
+                      key={note.id}
+                      className="rounded-xl border border-slate-200/80 bg-[#fffdfa] p-3 shadow-[0_6px_18px_rgba(67,83,108,0.05)]"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: note.authorTagColor }}
+                        />
+                        <span
+                          className="min-w-0 truncate text-xs font-semibold"
+                          style={{ color: note.authorTagColor }}
+                        >
+                          {note.authorTagName}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
+                        {note.content}
+                      </p>
+                      {note.isCurrent ? (
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-[var(--accent)]"
+                            onClick={beginNoteEditing}
+                          >
+                            <PencilSimpleIcon size={13} weight="bold" />
+                            修改
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  ),
+                )}
+
+                {editingNote ? (
+                  <div className="rounded-xl border border-blue-200 bg-white p-3 shadow-[0_8px_24px_rgba(52,120,246,0.08)]">
+                    <textarea
+                      className="min-h-28 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm leading-6 text-slate-700 outline-none transition focus:border-[var(--accent)] focus:bg-white focus:ring-2 focus:ring-blue-100"
+                      value={noteDraft}
+                      onChange={(event) => setNoteDraft(event.target.value)}
+                      placeholder="写下集合地点、准备事项或其他提醒…"
+                      maxLength={500}
+                      autoFocus
+                    />
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[11px] tabular-nums text-slate-400">
+                        {noteDraft.length}/500
+                      </span>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                          onClick={() => {
+                            setEditingNote(false);
+                            setNoteError("");
+                          }}
+                          disabled={noteSaving}
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg bg-[var(--accent)] px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2469df] disabled:opacity-45"
+                          onClick={() => void saveNote()}
+                          disabled={noteSaving || !noteDraft.trim()}
+                        >
+                          {noteSaving ? "保存中" : "保存"}
+                        </button>
+                      </div>
+                    </div>
+                    {noteError ? (
+                      <p className="mt-2 text-xs leading-5 text-red-600">{noteError}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </section>
           </aside>
 
           <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_40px_rgba(67,83,108,0.05)]">

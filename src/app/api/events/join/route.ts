@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { getEventParticipants, pickTagColor } from "@/lib/events";
+import {
+  getEventParticipants,
+  isExpiredOneTimeEvent,
+  pickTagColor,
+} from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -34,7 +38,7 @@ export async function POST(request: Request) {
       supabaseAdmin
         .from("events")
         .select(
-          "id, share_code, name, start_date, weeks_ahead, status, creator_identity_id, created_at",
+          "id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at",
         )
         .eq("share_code", shareCode)
         .maybeSingle(),
@@ -50,6 +54,11 @@ export async function POST(request: Request) {
 
   if (!event) {
     return Response.json({ error: "邀请码不存在" }, { status: 404 });
+  }
+
+  if (isExpiredOneTimeEvent(event)) {
+    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 
   const { data: existingMember, error: existingMemberError } = await supabaseAdmin
@@ -72,6 +81,7 @@ export async function POST(request: Request) {
         name: event.name,
         startDate: event.start_date,
         weeksAhead: event.weeks_ahead,
+        eventType: event.event_type,
         status: event.status,
         createdAt: event.created_at,
         memberId: existingMember.id,
@@ -114,6 +124,7 @@ export async function POST(request: Request) {
         name: event.name,
         startDate: event.start_date,
         weeksAhead: event.weeks_ahead,
+        eventType: event.event_type,
         status: event.status,
         createdAt: event.created_at,
         memberId: member.id,

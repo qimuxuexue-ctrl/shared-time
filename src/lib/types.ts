@@ -3,6 +3,8 @@ export type Identity = {
   displayId: string;
 };
 
+export type EventType = "one_time" | "ongoing";
+
 export type EventParticipantSummary = {
   id: string;
   tagName: string;
@@ -15,6 +17,7 @@ export type EventSummary = {
   name: string;
   startDate: string;
   weeksAhead: number;
+  eventType: EventType;
   status: "active" | "closed" | "archived";
   createdAt: string;
   memberId: string;
@@ -39,6 +42,16 @@ export type AvailabilitySlot = {
   startHour: number;
 };
 
+export type EventNote = {
+  id: string;
+  memberId: string;
+  authorTagName: string;
+  authorTagColor: string;
+  content: string;
+  isCurrent: boolean;
+  updatedAt: string;
+};
+
 export type EventWorkspaceData = {
   event: {
     id: string;
@@ -46,6 +59,7 @@ export type EventWorkspaceData = {
     name: string;
     startDate: string;
     weeksAhead: number;
+    eventType: EventType;
     status: "active" | "closed" | "archived";
     createdAt: string;
     isCreator: boolean;
@@ -53,5 +67,6 @@ export type EventWorkspaceData = {
   currentMemberId: string;
   weekStart: string;
   members: EventMember[];
+  notes: EventNote[];
   availability: AvailabilitySlot[];
 };

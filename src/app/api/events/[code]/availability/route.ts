@@ -6,6 +6,7 @@ import {
   isValidDateString,
   isValidEventHour,
 } from "@/lib/dates";
+import { isExpiredOneTimeEvent } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -43,7 +44,7 @@ export async function PUT(
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, start_date, weeks_ahead, status")
+    .select("id, start_date, event_type, status")
     .eq("share_code", code)
     .maybeSingle();
 
@@ -53,6 +54,11 @@ export async function PUT(
 
   if (!event) {
     return Response.json({ error: "事件不存在" }, { status: 404 });
+  }
+
+  if (isExpiredOneTimeEvent(event)) {
+    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 
   if (event.status !== "active") {
@@ -74,12 +80,12 @@ export async function PUT(
     return Response.json({ error: "你还没有加入这个事件" }, { status: 403 });
   }
 
-  const eventEnd = addDaysToDateString(event.start_date, event.weeks_ahead * 7 - 1);
+  const oneTimeEventEnd = addDaysToDateString(event.start_date, 6);
 
   for (const update of parsed.data.updates) {
     if (
       update.date < event.start_date ||
-      update.date > eventEnd ||
+      (event.event_type === "one_time" && update.date > oneTimeEventEnd) ||
       !isValidEventHour(update.date, update.startHour)
     ) {
       return Response.json({ error: "包含无效的时间格" }, { status: 400 });

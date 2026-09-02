@@ -13,7 +13,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   },
 });
 
-const tables = ["identities", "events", "event_members", "availabilities"];
+const tables = [
+  "identities",
+  "events",
+  "event_members",
+  "availabilities",
+  "event_notes",
+];
 
 for (const table of tables) {
   const { count, error } = await supabase

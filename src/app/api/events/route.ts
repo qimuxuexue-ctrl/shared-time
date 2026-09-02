@@ -15,7 +15,7 @@ const createEventSchema = z.object({
   identityId: identityIdSchema,
   name: z.string().trim().min(1, "请输入事件名称").max(80),
   tagName: z.string().trim().min(1).max(24).optional(),
-  weeksAhead: z.number().int().min(1).max(12).default(4),
+  eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
 });
 
 export async function GET(request: Request) {
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     return validationError(parsed.error);
   }
 
-  const { identityId, name, weeksAhead } = parsed.data;
+  const { identityId, name, eventType } = parsed.data;
   const { data: identity, error: identityError } = await supabaseAdmin
     .from("identities")
     .select("id, display_id")
@@ -68,10 +68,11 @@ export async function POST(request: Request) {
         name,
         creator_identity_id: identityId,
         start_date: startDate,
-        weeks_ahead: weeksAhead,
+        weeks_ahead: 1,
+        event_type: eventType,
       })
       .select(
-        "id, share_code, name, start_date, weeks_ahead, status, creator_identity_id, created_at",
+        "id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at",
       )
       .single();
 
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
           name: event.name,
           startDate: event.start_date,
           weeksAhead: event.weeks_ahead,
+          eventType: event.event_type,
           status: event.status,
           createdAt: event.created_at,
           memberId: member.id,

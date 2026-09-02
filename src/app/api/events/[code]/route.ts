@@ -6,6 +6,7 @@ import {
   getMondayDateString,
   isValidDateString,
 } from "@/lib/dates";
+import { isExpiredOneTimeEvent } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -45,7 +46,7 @@ export async function GET(
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
     .select(
-      "id, share_code, name, start_date, weeks_ahead, status, creator_identity_id, created_at",
+      "id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at",
     )
     .eq("share_code", code)
     .maybeSingle();
@@ -56,6 +57,11 @@ export async function GET(
 
   if (!event) {
     return Response.json({ error: "事件不存在" }, { status: 404 });
+  }
+
+  if (isExpiredOneTimeEvent(event)) {
+    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 
   const { data: currentMember, error: memberError } = await supabaseAdmin
@@ -76,19 +82,21 @@ export async function GET(
     );
   }
 
-  const eventEnd = addDaysToDateString(event.start_date, event.weeks_ahead * 7 - 1);
-  const lastWeekStart = addDaysToDateString(eventEnd, -6);
   const currentWeekStart = getMondayDateString(getBeijingDateString());
   const requestedWeekStart = parsed.data.weekStart ?? currentWeekStart;
   const weekStart =
     requestedWeekStart < event.start_date
       ? event.start_date
-      : requestedWeekStart > lastWeekStart
-        ? lastWeekStart
+      : event.event_type === "one_time" && requestedWeekStart > event.start_date
+        ? event.start_date
         : requestedWeekStart;
 
   const weekEnd = addDaysToDateString(weekStart, 6);
-  const [{ data: members, error: membersError }, { data: slots, error: slotsError }] =
+  const [
+    { data: members, error: membersError },
+    { data: slots, error: slotsError },
+    { data: notes, error: notesError },
+  ] =
     await Promise.all([
       supabaseAdmin
         .from("event_members")
@@ -101,11 +109,19 @@ export async function GET(
         .eq("event_id", event.id)
         .gte("slot_date", weekStart)
         .lte("slot_date", weekEnd),
+      supabaseAdmin
+        .from("event_notes")
+        .select("id, member_id, content, updated_at")
+        .eq("event_id", event.id)
+        .order("created_at", { ascending: true }),
     ]);
 
-  if (membersError || slotsError) {
+  if (membersError || slotsError || notesError) {
     return serverError();
   }
+
+  const memberList = members ?? [];
+  const membersById = new Map(memberList.map((member) => [member.id, member]));
 
   return Response.json({
     event: {
@@ -114,19 +130,36 @@ export async function GET(
       name: event.name,
       startDate: event.start_date,
       weeksAhead: event.weeks_ahead,
+      eventType: event.event_type,
       status: event.status,
       createdAt: event.created_at,
       isCreator: event.creator_identity_id === parsed.data.identityId,
     },
     currentMemberId: currentMember.id,
     weekStart,
-    members: (members ?? []).map((member) => ({
+    members: memberList.map((member) => ({
       id: member.id,
       identityId: member.identity_id,
       tagName: member.tag_name,
       tagColor: member.tag_color,
       isCurrent: member.id === currentMember.id,
     })),
+    notes: (notes ?? []).flatMap((note) => {
+      const author = membersById.get(note.member_id);
+      return author
+        ? [
+            {
+              id: note.id,
+              memberId: note.member_id,
+              authorTagName: author.tag_name,
+              authorTagColor: author.tag_color,
+              content: note.content,
+              isCurrent: note.member_id === currentMember.id,
+              updatedAt: note.updated_at,
+            },
+          ]
+        : [];
+    }),
     availability: (slots ?? []).map((slot) => ({
       memberId: slot.member_id,
       date: slot.slot_date,

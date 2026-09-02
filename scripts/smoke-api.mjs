@@ -13,6 +13,7 @@ const supabase = createClient(
 let identityId;
 const otherIdentityIds = [];
 let eventId;
+let oneTimeEventId;
 
 async function post(path, body) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -43,9 +44,12 @@ try {
   const createResult = await post("/api/events", {
     identityId,
     name: "Codex test event",
-    weeksAhead: 4,
+    eventType: "ongoing",
   });
   eventId = createResult.event.id;
+  if (createResult.event.eventType !== "ongoing") {
+    throw new Error("Event type was not saved.");
+  }
   console.log("event create: ok");
 
   for (const [index, tagName] of ["小林", "Mika", "阿雪"].entries()) {
@@ -87,6 +91,39 @@ try {
   }
   console.log("weekday 10:00 availability: ok");
 
+  const saveCreatorNote = async (content) => {
+    const response = await fetch(
+      `${baseUrl}/api/events/${createResult.event.shareCode}/notes`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId, content }),
+      },
+    );
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(`Creator note failed: ${payload.error ?? response.statusText}`);
+    }
+  };
+  await saveCreatorNote("第一次备注");
+  await saveCreatorNote("修改后的备注");
+
+  const otherNoteResponse = await fetch(
+    `${baseUrl}/api/events/${createResult.event.shareCode}/notes`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        identityId: otherIdentityIds[0],
+        content: "其他参与者的备注",
+      }),
+    },
+  );
+  if (!otherNoteResponse.ok) {
+    throw new Error("Another participant could not save a note.");
+  }
+  console.log("shared notes create and edit: ok");
+
   const joinResult = await post("/api/events/join", {
     identityId,
     shareCode: createResult.event.shareCode,
@@ -114,10 +151,17 @@ try {
     `${baseUrl}/api/events/${createResult.event.shareCode}?identityId=${encodeURIComponent(identityId)}&weekStart=${createResult.event.startDate}`,
   );
   const workspace = await workspaceResponse.json();
-  if (!workspaceResponse.ok || workspace.members.length !== 4) {
+  if (
+    !workspaceResponse.ok ||
+    workspace.members.length !== 4 ||
+    workspace.notes.length !== 2 ||
+    !workspace.notes.some(
+      (note) => note.isCurrent && note.content === "修改后的备注",
+    )
+  ) {
     throw new Error("Workspace did not return all members.");
   }
-  console.log("multi-member workspace: ok");
+  console.log("multi-member workspace and shared notes: ok");
 
   const deniedDelete = await fetch(
     `${baseUrl}/api/events/${createResult.event.shareCode}`,
@@ -159,11 +203,65 @@ try {
   if (remainingAvailability !== 0) {
     throw new Error("Availability was not removed by cascade delete.");
   }
+  const { count: remainingNotes } = await supabase
+    .from("event_notes")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+  if (remainingNotes !== 0) {
+    throw new Error("Notes were not removed by cascade delete.");
+  }
   eventId = undefined;
   console.log("creator delete and cascade cleanup: ok");
+
+  const oneTimeCreate = await post("/api/events", {
+    identityId,
+    name: "Expiring one-time event",
+    eventType: "one_time",
+  });
+  oneTimeEventId = oneTimeCreate.event.id;
+
+  const outsideWeekResponse = await fetch(
+    `${baseUrl}/api/events/${oneTimeCreate.event.shareCode}/availability`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        identityId,
+        updates: [
+          { date: earlyWeekdayDate, startHour: 10, available: true },
+        ],
+      }),
+    },
+  );
+  if (outsideWeekResponse.status !== 400) {
+    throw new Error("One-time event accepted a slot outside its week.");
+  }
+
+  const expiredDate = new Date(`${oneTimeCreate.event.startDate}T00:00:00Z`);
+  expiredDate.setUTCDate(expiredDate.getUTCDate() - 7);
+  const { error: expireError } = await supabase
+    .from("events")
+    .update({ start_date: expiredDate.toISOString().slice(0, 10) })
+    .eq("id", oneTimeEventId);
+  if (expireError) throw expireError;
+
+  await post("/api/identity", { id: testId });
+  const { data: expiredEvent } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", oneTimeEventId)
+    .maybeSingle();
+  if (expiredEvent) {
+    throw new Error("Expired one-time event was not automatically deleted.");
+  }
+  oneTimeEventId = undefined;
+  console.log("one-time event range and expiry cleanup: ok");
 } finally {
   if (eventId) {
     await supabase.from("events").delete().eq("id", eventId);
+  }
+  if (oneTimeEventId) {
+    await supabase.from("events").delete().eq("id", oneTimeEventId);
   }
   if (identityId) {
     await supabase.from("identities").delete().eq("id", identityId);
