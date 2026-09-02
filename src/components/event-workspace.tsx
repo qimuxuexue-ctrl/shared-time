@@ -639,6 +639,20 @@ export function EventWorkspace({ code }: { code: string }) {
                     })}
                   </div>
                 ))}
+                <div
+                  className="grid grid-cols-[68px_repeat(7,minmax(118px,1fr))]"
+                  aria-hidden="true"
+                >
+                  <div className="flex min-h-9 items-start justify-end bg-slate-50/50 px-3 pt-2 text-xs font-medium tabular-nums text-slate-400">
+                    24:00
+                  </div>
+                  {dates.map((date) => (
+                    <div
+                      key={date}
+                      className="min-h-9 border-l border-slate-100 bg-white"
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </section>

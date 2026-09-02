@@ -11,6 +11,7 @@ import {
   TrashIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
@@ -117,9 +118,14 @@ export function HomeApp() {
       <main className="grid min-h-[100dvh] place-items-center bg-[var(--page)] px-5 py-12">
         <section className="w-full max-w-[430px]">
           <div className="mb-8">
-            <div className="mb-5 grid size-12 place-items-center rounded-2xl bg-[var(--accent)] text-white shadow-[0_10px_28px_rgba(52,120,246,0.22)]">
-              <CalendarBlankIcon size={24} weight="fill" />
-            </div>
+            <Image
+              src="/brand-character.png"
+              alt="Share timeline 角色图标"
+              width={80}
+              height={80}
+              priority
+              className="mb-4 size-20 object-contain"
+            />
             <h1 className="text-4xl font-semibold tracking-[-0.04em] text-slate-950">
               Share timeline
             </h1>
@@ -171,9 +177,13 @@ export function HomeApp() {
       <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl bg-[var(--accent)] text-white">
-              <CalendarBlankIcon size={19} weight="fill" />
-            </div>
+            <Image
+              src="/brand-character.png"
+              alt=""
+              width={40}
+              height={40}
+              className="size-10 object-contain"
+            />
             <span className="text-base font-semibold tracking-tight text-slate-950">
               Share timeline
             </span>
