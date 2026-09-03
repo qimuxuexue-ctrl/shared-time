@@ -7,6 +7,20 @@ export type EventType = "one_time" | "ongoing";
 
 export type EventUpdateType = "participant" | "note" | "timeline";
 
+export type HomeNotificationType =
+  | EventUpdateType
+  | "event_deleted"
+  | "event_expired";
+
+export type HomeNotification = {
+  id: string;
+  sourceEventId: string;
+  eventShareCode: string;
+  eventName: string;
+  type: HomeNotificationType;
+  createdAt: string;
+};
+
 export type EventParticipantSummary = {
   id: string;
   tagName: string;

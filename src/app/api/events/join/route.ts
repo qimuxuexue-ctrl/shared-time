@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 import {
+  deleteExpiredEvent,
   getEventParticipants,
   isExpiredOneTimeEvent,
+  notifyEventMembers,
   pickTagColor,
 } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
   }
 
   if (isExpiredOneTimeEvent(event)) {
-    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    await deleteExpiredEvent(event);
     return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 
@@ -100,7 +102,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "这个事件已经停止加入" }, { status: 409 });
   }
 
-  const activityAt = new Date().toISOString();
   const { data: member, error: memberError } = await supabaseAdmin
     .from("event_members")
     .insert({
@@ -116,22 +117,10 @@ export async function POST(request: Request) {
     return serverError("加入事件失败，请稍后重试");
   }
 
-  const [{ error: activityError }, { error: readError }] = await Promise.all([
-    supabaseAdmin
-      .from("events")
-      .update({ last_member_activity_at: activityAt })
-      .eq("id", event.id),
-    supabaseAdmin
-      .from("event_members")
-      .update({ last_viewed_at: activityAt })
-      .eq("id", member.id),
-  ]);
-
-  if (activityError || readError) {
-    console.error(
-      "Unable to record member activity",
-      activityError ?? readError,
-    );
+  try {
+    await notifyEventMembers(event, "participant", identityId);
+  } catch (error) {
+    console.error("Unable to notify members about new participant", error);
   }
 
   const participants = await getEventParticipants(event.id);

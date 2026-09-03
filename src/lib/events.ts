@@ -3,6 +3,11 @@ import { randomInt } from "node:crypto";
 import { getBeijingDateString, getMondayDateString } from "@/lib/dates";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TAG_COLOR_VALUES } from "@/lib/tag-colors";
+import type {
+  EventUpdateType,
+  HomeNotification,
+  HomeNotificationType,
+} from "@/lib/types";
 
 const SHARE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -16,9 +21,6 @@ type JoinedEvent = {
   status: "active" | "closed" | "archived";
   creator_identity_id: string;
   created_at: string;
-  last_member_activity_at: string | null;
-  last_note_activity_at: string | null;
-  last_availability_activity_at: string | null;
 };
 
 type ParticipantRow = {
@@ -32,9 +34,29 @@ type MembershipRow = {
   id: string;
   tag_name: string;
   tag_color: string;
-  last_viewed_at?: string;
   events: unknown;
 };
+
+type NotificationRow = {
+  id: string;
+  source_event_id: string;
+  event_share_code: string;
+  event_name: string;
+  notification_type: HomeNotificationType;
+  created_at: string;
+};
+
+type NotifiableEvent = {
+  id: string;
+  share_code: string;
+  name: string;
+};
+
+const ACTIVE_UPDATE_TYPES = new Set<HomeNotificationType>([
+  "participant",
+  "note",
+  "timeline",
+]);
 
 export function createShareCode() {
   return Array.from({ length: 6 }, () =>
@@ -63,15 +85,102 @@ export function isExpiredOneTimeEvent(event: {
 
 export async function cleanupExpiredOneTimeEvents() {
   const currentWeekStart = getMondayDateString(getBeijingDateString());
-  const { error } = await supabaseAdmin
+  const { data: expiredEvents, error: expiredEventsError } = await supabaseAdmin
     .from("events")
-    .delete()
+    .select("id, share_code, name")
     .eq("event_type", "one_time")
     .lt("start_date", currentWeekStart);
 
-  if (error) {
+  if (expiredEventsError) {
     throw new Error("Unable to clean up expired events.");
   }
+
+  if (!expiredEvents?.length) return;
+
+  await Promise.all(expiredEvents.map(deleteExpiredEvent));
+}
+
+export async function notifyEventMembers(
+  event: NotifiableEvent,
+  type: HomeNotificationType,
+  excludeIdentityId?: string,
+) {
+  const { data: members, error: membersError } = await supabaseAdmin
+    .from("event_members")
+    .select("identity_id")
+    .eq("event_id", event.id);
+
+  if (membersError) {
+    throw new Error("Unable to load notification recipients.");
+  }
+
+  const recipientIds = Array.from(
+    new Set(
+      (members ?? [])
+        .map((member) => member.identity_id)
+        .filter((identityId) => identityId !== excludeIdentityId),
+    ),
+  );
+
+  if (!recipientIds.length) return;
+
+  const createdAt = new Date().toISOString();
+  const { error } = await supabaseAdmin.from("identity_notifications").upsert(
+    recipientIds.map((identityId) => ({
+      identity_id: identityId,
+      source_event_id: event.id,
+      event_share_code: event.share_code,
+      event_name: event.name,
+      notification_type: type,
+      created_at: createdAt,
+    })),
+    { onConflict: "identity_id,source_event_id,notification_type" },
+  );
+
+  if (error) {
+    throw new Error("Unable to create event notifications.");
+  }
+}
+
+export async function deleteExpiredEvent(event: NotifiableEvent) {
+  try {
+    await notifyEventMembers(event, "event_expired");
+  } catch (error) {
+    console.error("Unable to notify members about expired event", error);
+  }
+
+  const { error } = await supabaseAdmin
+    .from("events")
+    .delete()
+    .eq("id", event.id);
+
+  if (error) {
+    throw new Error("Unable to clean up expired event.");
+  }
+}
+
+async function getIdentityNotifications(identityId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("identity_notifications")
+    .select(
+      "id, source_event_id, event_share_code, event_name, notification_type, created_at",
+    )
+    .eq("identity_id", identityId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    // Keep the site usable until the additive notification migration is run.
+    return [] as HomeNotification[];
+  }
+
+  return ((data ?? []) as NotificationRow[]).map((notification) => ({
+    id: notification.id,
+    sourceEventId: notification.source_event_id,
+    eventShareCode: notification.event_share_code,
+    eventName: notification.event_name,
+    type: notification.notification_type,
+    createdAt: notification.created_at,
+  }));
 }
 
 export async function getEventParticipants(eventId: string) {
@@ -92,33 +201,19 @@ export async function getEventParticipants(eventId: string) {
   }));
 }
 
-export async function getIdentityEvents(identityId: string) {
-  await cleanupExpiredOneTimeEvents();
-
-  const membershipsResult = await supabaseAdmin
+async function getIdentityEvents(identityId: string) {
+  const { data, error } = await supabaseAdmin
     .from("event_members")
     .select(
-      "id, tag_name, tag_color, last_viewed_at, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at, last_member_activity_at, last_note_activity_at, last_availability_activity_at)",
+      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at)",
     )
     .eq("identity_id", identityId);
 
-  let notificationsEnabled = true;
-  let memberships: MembershipRow[];
-  if (membershipsResult.error) {
-    notificationsEnabled = false;
-    const fallbackResult = await supabaseAdmin
-      .from("event_members")
-      .select(
-        "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at)",
-      )
-      .eq("identity_id", identityId);
-    if (fallbackResult.error) {
-      throw new Error("Unable to load identity events.");
-    }
-    memberships = (fallbackResult.data ?? []) as MembershipRow[];
-  } else {
-    memberships = (membershipsResult.data ?? []) as MembershipRow[];
+  if (error) {
+    throw new Error("Unable to load identity events.");
   }
+
+  const memberships = (data ?? []) as MembershipRow[];
 
   const eventIds = memberships.map(
     (membership) => (membership.events as unknown as JoinedEvent).id,
@@ -147,28 +242,12 @@ export async function getIdentityEvents(identityId: string) {
   return memberships
     .map((membership) => {
       const event = membership.events as unknown as JoinedEvent;
-      const lastViewedAt = notificationsEnabled
-        ? Date.parse(membership.last_viewed_at ?? "")
-        : Number.POSITIVE_INFINITY;
       const participants = (participantsByEvent.get(event.id) ?? []).map(
         (participant) => ({
           id: participant.id,
           tagName: participant.tag_name,
           tagColor: participant.tag_color,
         }),
-      );
-      const unreadUpdates = [
-        {
-          type: "participant" as const,
-          updatedAt: event.last_member_activity_at,
-        },
-        { type: "note" as const, updatedAt: event.last_note_activity_at },
-        {
-          type: "timeline" as const,
-          updatedAt: event.last_availability_activity_at,
-        },
-      ].flatMap(({ type, updatedAt }) =>
-        updatedAt && Date.parse(updatedAt) > lastViewedAt ? [type] : [],
       );
 
       return {
@@ -186,8 +265,34 @@ export async function getIdentityEvents(identityId: string) {
         isCreator: event.creator_identity_id === identityId,
         participantCount: participants.length,
         participants,
-        unreadUpdates,
+        unreadUpdates: [] as EventUpdateType[],
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function getIdentityHomeData(identityId: string) {
+  await cleanupExpiredOneTimeEvents();
+
+  const [events, notifications] = await Promise.all([
+    getIdentityEvents(identityId),
+    getIdentityNotifications(identityId),
+  ]);
+  const updatesByEvent = new Map<string, EventUpdateType[]>();
+
+  for (const notification of notifications) {
+    if (!ACTIVE_UPDATE_TYPES.has(notification.type)) continue;
+    updatesByEvent.set(notification.sourceEventId, [
+      ...(updatesByEvent.get(notification.sourceEventId) ?? []),
+      notification.type as EventUpdateType,
+    ]);
+  }
+
+  return {
+    events: events.map((event) => ({
+      ...event,
+      unreadUpdates: updatesByEvent.get(event.id) ?? [],
+    })),
+    notifications,
+  };
 }

@@ -1,5 +1,5 @@
 import { identityInputSchema, normalizeIdentityKey } from "@/lib/identity";
-import { getIdentityEvents } from "@/lib/events";
+import { getIdentityHomeData } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       return serverError();
     }
 
-    const events = await getIdentityEvents(identity.id);
+    const { events, notifications } = await getIdentityHomeData(identity.id);
 
     return Response.json({
       identity: {
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
       },
       isNew,
       events,
+      notifications,
     });
   } catch (error) {
     console.error("Identity API error", error);

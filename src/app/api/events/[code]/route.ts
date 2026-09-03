@@ -6,7 +6,11 @@ import {
   getMondayDateString,
   isValidDateString,
 } from "@/lib/dates";
-import { isExpiredOneTimeEvent } from "@/lib/events";
+import {
+  deleteExpiredEvent,
+  isExpiredOneTimeEvent,
+  notifyEventMembers,
+} from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -16,7 +20,6 @@ const querySchema = z.object({
     .string()
     .refine(isValidDateString, "周起始日期不正确")
     .optional(),
-  markRead: z.enum(["0", "1"]).optional(),
 });
 
 const deleteSchema = z.object({
@@ -38,7 +41,6 @@ export async function GET(
   const parsed = querySchema.safeParse({
     identityId: searchParams.get("identityId"),
     weekStart: searchParams.get("weekStart") ?? undefined,
-    markRead: searchParams.get("markRead") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -62,7 +64,7 @@ export async function GET(
   }
 
   if (isExpiredOneTimeEvent(event)) {
-    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    await deleteExpiredEvent(event);
     return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 
@@ -82,17 +84,6 @@ export async function GET(
       { error: "你还没有加入这个事件" },
       { status: 403 },
     );
-  }
-
-  if (parsed.data.markRead === "1") {
-    const { error: readError } = await supabaseAdmin
-      .from("event_members")
-      .update({ last_viewed_at: new Date().toISOString() })
-      .eq("id", currentMember.id);
-
-    if (readError) {
-      console.error("Unable to mark event as read", readError);
-    }
   }
 
   const currentWeekStart = getMondayDateString(getBeijingDateString());
@@ -201,9 +192,14 @@ export async function DELETE(
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, creator_identity_id")
+    .select("id, share_code, name, creator_identity_id")
     .eq("share_code", code)
-    .maybeSingle<{ id: string; creator_identity_id: string }>();
+    .maybeSingle<{
+      id: string;
+      share_code: string;
+      name: string;
+      creator_identity_id: string;
+    }>();
 
   if (eventError) {
     return serverError();
@@ -218,6 +214,12 @@ export async function DELETE(
       { error: "只有事件创建者可以删除这个事件" },
       { status: 403 },
     );
+  }
+
+  try {
+    await notifyEventMembers(event, "event_deleted");
+  } catch (error) {
+    console.error("Unable to notify members about deleted event", error);
   }
 
   const { error: deleteError } = await supabaseAdmin

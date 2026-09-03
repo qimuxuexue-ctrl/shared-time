@@ -114,6 +114,30 @@ create table if not exists public.event_notes (
   constraint event_notes_content_length check (char_length(content) between 1 and 500)
 );
 
+create table if not exists public.identity_notifications (
+  id uuid primary key default gen_random_uuid(),
+  identity_id uuid not null references public.identities(id) on delete cascade,
+  source_event_id uuid not null,
+  event_share_code text not null,
+  event_name text not null,
+  notification_type text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  constraint identity_notifications_share_code_format
+    check (event_share_code ~ '^[A-Z0-9]{6}$'),
+  constraint identity_notifications_event_name_length
+    check (char_length(event_name) between 1 and 80),
+  constraint identity_notifications_type_values
+    check (notification_type in (
+      'participant',
+      'note',
+      'timeline',
+      'event_deleted',
+      'event_expired'
+    )),
+  constraint identity_notifications_event_type_unique
+    unique (identity_id, source_event_id, notification_type)
+);
+
 create index if not exists events_creator_identity_idx
   on public.events(creator_identity_id);
 
@@ -125,6 +149,9 @@ create index if not exists availabilities_event_week_idx
 
 create index if not exists event_notes_event_idx
   on public.event_notes(event_id);
+
+create index if not exists identity_notifications_identity_created_idx
+  on public.identity_notifications(identity_id, created_at desc);
 
 drop trigger if exists set_events_updated_at on public.events;
 create trigger set_events_updated_at
@@ -151,15 +178,18 @@ alter table public.events enable row level security;
 alter table public.event_members enable row level security;
 alter table public.availabilities enable row level security;
 alter table public.event_notes enable row level security;
+alter table public.identity_notifications enable row level security;
 
 revoke all on table public.identities from anon, authenticated;
 revoke all on table public.events from anon, authenticated;
 revoke all on table public.event_members from anon, authenticated;
 revoke all on table public.availabilities from anon, authenticated;
 revoke all on table public.event_notes from anon, authenticated;
+revoke all on table public.identity_notifications from anon, authenticated;
 
 grant all on table public.identities to service_role;
 grant all on table public.events to service_role;
 grant all on table public.event_members to service_role;
 grant all on table public.availabilities to service_role;
 grant all on table public.event_notes to service_role;
+grant all on table public.identity_notifications to service_role;

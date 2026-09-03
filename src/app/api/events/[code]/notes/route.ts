@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { isExpiredOneTimeEvent } from "@/lib/events";
+import {
+  deleteExpiredEvent,
+  isExpiredOneTimeEvent,
+  notifyEventMembers,
+} from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -29,7 +33,7 @@ export async function PUT(
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, start_date, event_type, status")
+    .select("id, share_code, name, start_date, event_type, status")
     .eq("share_code", code)
     .maybeSingle();
 
@@ -42,7 +46,7 @@ export async function PUT(
   }
 
   if (isExpiredOneTimeEvent(event)) {
-    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    await deleteExpiredEvent(event);
     return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 
@@ -82,20 +86,10 @@ export async function PUT(
     return serverError("保存备注失败");
   }
 
-  const activityAt = new Date().toISOString();
-  const [{ error: activityError }, { error: readError }] = await Promise.all([
-    supabaseAdmin
-      .from("events")
-      .update({ last_note_activity_at: activityAt })
-      .eq("id", event.id),
-    supabaseAdmin
-      .from("event_members")
-      .update({ last_viewed_at: activityAt })
-      .eq("id", member.id),
-  ]);
-
-  if (activityError || readError) {
-    console.error("Unable to record note activity", activityError ?? readError);
+  try {
+    await notifyEventMembers(event, "note", parsed.data.identityId);
+  } catch (error) {
+    console.error("Unable to notify members about note update", error);
   }
 
   return Response.json({

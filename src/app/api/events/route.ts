@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getBeijingDateString, getMondayDateString } from "@/lib/dates";
 import {
   createShareCode,
-  getIdentityEvents,
+  getIdentityHomeData,
   pickTagColor,
 } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
@@ -27,8 +27,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const events = await getIdentityEvents(parsed.data);
-    return Response.json({ events });
+    const homeData = await getIdentityHomeData(parsed.data);
+    return Response.json(homeData);
   } catch {
     return serverError();
   }

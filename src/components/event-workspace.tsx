@@ -153,7 +153,6 @@ export function EventWorkspace({ code }: { code: string }) {
         const query = new URLSearchParams({
           identityId: activeIdentity.id,
           weekStart: requestedWeek,
-          markRead: silent ? "0" : "1",
         });
         const response = await fetch(`/api/events/${code}?${query}`);
         const payload = (await response.json()) as EventWorkspaceData & {

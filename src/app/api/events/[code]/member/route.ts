@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { isExpiredOneTimeEvent } from "@/lib/events";
+import { deleteExpiredEvent, isExpiredOneTimeEvent } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -30,7 +30,7 @@ export async function PUT(
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, start_date, event_type, status")
+    .select("id, share_code, name, start_date, event_type, status")
     .eq("share_code", code)
     .maybeSingle();
 
@@ -43,7 +43,7 @@ export async function PUT(
   }
 
   if (isExpiredOneTimeEvent(event)) {
-    await supabaseAdmin.from("events").delete().eq("id", event.id);
+    await deleteExpiredEvent(event);
     return Response.json({ error: "这个一次性事件已经过期" }, { status: 410 });
   }
 

@@ -4,14 +4,21 @@ import {
   ArrowRightIcon,
   BellRingingIcon,
   CalendarBlankIcon,
+  CalendarCheckIcon,
+  CalendarXIcon,
+  CaretDownIcon,
   ClockIcon,
+  ClockCounterClockwiseIcon,
   HashIcon,
+  NotePencilIcon,
   PlusIcon,
   QuestionMarkIcon,
   SignOutIcon,
   TicketIcon,
   TrashIcon,
+  UserPlusIcon,
   UsersThreeIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -30,7 +37,8 @@ import {
 import type {
   EventSummary,
   EventType,
-  EventUpdateType,
+  HomeNotification,
+  HomeNotificationType,
   Identity,
 } from "@/lib/types";
 
@@ -38,6 +46,7 @@ type IdentityResponse = {
   identity: Identity;
   isNew: boolean;
   events: EventSummary[];
+  notifications: HomeNotification[];
 };
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -48,20 +57,40 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
-const updateLabels: Record<EventUpdateType, string> = {
+const notificationLabels: Record<HomeNotificationType, string> = {
   participant: "有新参与者加入",
   note: "备注有更新",
-  timeline: "空闲时间有更新",
+  timeline: "有新的空闲时间",
+  event_deleted: "已由创建者删除",
+  event_expired: "已结束并自动清理",
 };
 
-function describeUpdates(event: EventSummary) {
-  return event.unreadUpdates.map((type) => updateLabels[type]).join("、");
+function formatNotificationTime(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function NotificationTypeIcon({ type }: { type: HomeNotificationType }) {
+  const props = { size: 19, weight: "duotone" as const };
+
+  if (type === "participant") return <UserPlusIcon {...props} />;
+  if (type === "note") return <NotePencilIcon {...props} />;
+  if (type === "timeline") return <CalendarCheckIcon {...props} />;
+  if (type === "event_deleted") return <CalendarXIcon {...props} />;
+  return <ClockCounterClockwiseIcon {...props} />;
 }
 
 export function HomeApp() {
   const router = useRouter();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [events, setEvents] = useState<EventSummary[]>([]);
+  const [notifications, setNotifications] = useState<HomeNotification[]>([]);
   const [status, setStatus] = useState<"checking" | "signed-out" | "ready">(
     "checking",
   );
@@ -71,6 +100,11 @@ export function HomeApp() {
   const [modal, setModal] = useState<"create" | "join" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EventSummary | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [notificationsExpanded, setNotificationsExpanded] = useState(false);
+  const [dismissingNotifications, setDismissingNotifications] = useState<
+    Set<string>
+  >(new Set());
+  const [notificationError, setNotificationError] = useState("");
 
   const signIn = useCallback(async (displayId: string) => {
     setError("");
@@ -86,6 +120,7 @@ export function HomeApp() {
       storeIdentity(payload.identity);
       setIdentity(payload.identity);
       setEvents(payload.events);
+      setNotifications(payload.notifications);
       setStatus("ready");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "无法识别这个 ID");
@@ -100,8 +135,15 @@ export function HomeApp() {
       const response = await fetch(
         `/api/events?identityId=${encodeURIComponent(activeIdentity.id)}`,
       );
-      const payload = await readJson<{ events: EventSummary[] }>(response);
+      const payload = await readJson<{
+        events: EventSummary[];
+        notifications: HomeNotification[];
+      }>(response);
       setEvents(payload.events);
+      setNotifications(payload.notifications);
+      setNotificationsExpanded((current) =>
+        payload.notifications.length <= 3 ? false : current,
+      );
     } catch {
       // Keep the current cards visible when a background refresh fails.
     }
@@ -139,12 +181,63 @@ export function HomeApp() {
     };
   }, [identity, refreshEvents, status]);
 
+  const dismissNotification = async (notification: HomeNotification) => {
+    setNotificationError("");
+    setDismissingNotifications((current) =>
+      new Set(current).add(notification.id),
+    );
+
+    try {
+      const response = await fetch(`/api/notifications/${notification.id}`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity?.id }),
+      });
+      await readJson<{ ok: true }>(response);
+      setNotifications((current) =>
+        current.filter((item) => item.id !== notification.id),
+      );
+      if (notifications.length <= 4) setNotificationsExpanded(false);
+      if (
+        notification.type === "participant" ||
+        notification.type === "note" ||
+        notification.type === "timeline"
+      ) {
+        setEvents((current) =>
+          current.map((event) =>
+            event.id === notification.sourceEventId
+              ? {
+                  ...event,
+                  unreadUpdates: event.unreadUpdates.filter(
+                    (type) => type !== notification.type,
+                  ),
+                }
+              : event,
+          ),
+        );
+      }
+    } catch (caught) {
+      setNotificationError(
+        caught instanceof Error ? caught.message : "暂时无法关闭这条动态",
+      );
+    } finally {
+      setDismissingNotifications((current) => {
+        const next = new Set(current);
+        next.delete(notification.id);
+        return next;
+      });
+    }
+  };
+
   const signOut = () => {
     clearStoredIdentity();
     setIdentity(null);
     setEvents([]);
+    setNotifications([]);
     setIdInput("");
     setError("");
+    setNotificationError("");
+    setNotificationsExpanded(false);
     setStatus("signed-out");
   };
 
@@ -216,9 +309,11 @@ export function HomeApp() {
     );
   }
 
-  const eventsWithUpdates = events.filter(
-    (event) => event.unreadUpdates.length > 0,
-  );
+  const showAllNotifications =
+    notificationsExpanded && notifications.length > 3;
+  const visibleNotifications = showAllNotifications
+    ? notifications
+    : notifications.slice(0, 3);
 
   return (
     <main className="min-h-[100dvh] bg-[var(--page)]">
@@ -249,53 +344,115 @@ export function HomeApp() {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-        {eventsWithUpdates.length > 0 ? (
+        {notifications.length > 0 ? (
           <section
             aria-label="事件新动态"
-            className="mb-7 rounded-[20px] border border-blue-200/70 bg-white px-4 py-4 shadow-[0_16px_44px_rgba(76,111,173,0.1)] sm:px-5"
+            className="mb-7 overflow-hidden rounded-[20px] border border-blue-200/70 bg-white shadow-[0_16px_44px_rgba(76,111,173,0.1)]"
           >
-            <div className="flex items-start gap-3.5">
+            <div className="flex items-center gap-3.5 px-4 pb-3 pt-4 sm:px-5">
               <div className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-blue-50 text-blue-600">
                 <BellRingingIcon size={20} weight="duotone" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {eventsWithUpdates.length} 个事件有新动态
-                  </h2>
-                  <span className="shrink-0 text-xs font-medium text-slate-400">
-                    打开后标为已读
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-1.5 lg:grid-cols-2">
-                  {eventsWithUpdates.slice(0, 4).map((event) => (
-                    <Link
-                      key={event.id}
-                      href={`/e/${event.shareCode}`}
-                      prefetch
-                      className="group/update flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 text-sm transition hover:bg-blue-50/70 active:scale-[0.99]"
-                    >
-                      <span className="max-w-40 shrink-0 truncate font-semibold text-slate-700">
-                        {event.name}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-slate-500">
-                        {describeUpdates(event)}
-                      </span>
-                      <ArrowRightIcon
-                        size={15}
-                        weight="bold"
-                        className="shrink-0 text-blue-300 transition group-hover/update:translate-x-0.5 group-hover/update:text-blue-500"
-                      />
-                    </Link>
-                  ))}
-                </div>
-                {eventsWithUpdates.length > 4 ? (
-                  <p className="mt-2 px-2 text-xs text-slate-400">
-                    另有 {eventsWithUpdates.length - 4} 个事件出现更新
-                  </p>
-                ) : null}
+                <h2 className="text-sm font-semibold text-slate-900">事件动态</h2>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {notifications.length} 条未关闭的消息
+                </p>
               </div>
             </div>
+
+            <div className="border-t border-slate-100 px-2 sm:px-3">
+              {visibleNotifications.map((notification, index) => {
+                const isActiveEvent =
+                  notification.type === "participant" ||
+                  notification.type === "note" ||
+                  notification.type === "timeline";
+                const content = (
+                  <>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-50/80 text-blue-500">
+                      <NotificationTypeIcon type={notification.type} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-slate-800">
+                        {notification.eventName}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-slate-500">
+                        {notificationLabels[notification.type]}
+                        <span className="ml-2 text-xs text-slate-400">
+                          {formatNotificationTime(notification.createdAt)}
+                        </span>
+                      </span>
+                    </span>
+                    {isActiveEvent ? (
+                      <ArrowRightIcon
+                        size={16}
+                        weight="bold"
+                        className="shrink-0 text-blue-300 transition group-hover/notice:translate-x-0.5 group-hover/notice:text-blue-500"
+                      />
+                    ) : null}
+                  </>
+                );
+
+                return (
+                  <div
+                    key={notification.id}
+                    className={`flex items-center gap-2 border-slate-100 py-2.5 ${
+                      index > 0 ? "border-t" : ""
+                    }`}
+                  >
+                    {isActiveEvent ? (
+                      <Link
+                        href={`/e/${notification.eventShareCode}`}
+                        prefetch
+                        className="group/notice flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-blue-50/60 active:scale-[0.99]"
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-1.5">
+                        {content}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="grid size-9 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 active:scale-95 disabled:opacity-40"
+                      onClick={() => void dismissNotification(notification)}
+                      disabled={dismissingNotifications.has(notification.id)}
+                      aria-label={`关闭关于 ${notification.eventName} 的动态`}
+                      title="关闭这条动态"
+                    >
+                      <XIcon size={16} weight="bold" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {notificationError ? (
+              <p className="border-t border-red-100 bg-red-50/70 px-5 py-2.5 text-xs text-red-600">
+                {notificationError}
+              </p>
+            ) : null}
+
+            {notifications.length > 3 ? (
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-1.5 border-t border-slate-100 px-4 py-3 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 active:bg-slate-100"
+                onClick={() => setNotificationsExpanded((current) => !current)}
+                aria-expanded={showAllNotifications}
+              >
+                {showAllNotifications
+                  ? "收起消息"
+                  : `展开另外 ${notifications.length - 3} 条`}
+                <CaretDownIcon
+                  size={15}
+                  weight="bold"
+                  className={`transition duration-200 ${
+                    showAllNotifications ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+            ) : null}
           </section>
         ) : null}
 
@@ -449,6 +606,7 @@ export function HomeApp() {
               current.filter((event) => event.id !== deleteTarget.id),
             );
             setDeleteTarget(null);
+            void refreshEvents(identity);
           }}
         />
       ) : null}
