@@ -25,6 +25,7 @@ import {
 } from "react";
 
 import { DeleteEventModal } from "@/components/delete-event-modal";
+import { Modal } from "@/components/modal";
 import { readStoredIdentity } from "@/lib/browser-identity";
 import {
   addDaysToDateString,
@@ -33,6 +34,7 @@ import {
   isPastSlot,
   isValidEventHour,
 } from "@/lib/dates";
+import { TAG_COLOR_OPTIONS } from "@/lib/tag-colors";
 import type {
   AvailabilitySlot,
   EventMember,
@@ -111,6 +113,9 @@ export function EventWorkspace({ code }: { code: string }) {
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [editingMember, setEditingMember] = useState(false);
+  const [memberSaving, setMemberSaving] = useState(false);
+  const [memberError, setMemberError] = useState("");
 
   const loadWorkspace = useCallback(
     async (activeIdentity: Identity, requestedWeek: string, silent = false) => {
@@ -205,6 +210,11 @@ export function EventWorkspace({ code }: { code: string }) {
   const ownNote = useMemo(
     () => data?.notes.find((note) => note.isCurrent) ?? null,
     [data?.notes],
+  );
+
+  const ownMember = useMemo(
+    () => data?.members.find((member) => member.isCurrent) ?? null,
+    [data?.members],
   );
 
   const saveUpdates = async (updates: SlotUpdate[]) => {
@@ -329,6 +339,58 @@ export function EventWorkspace({ code }: { code: string }) {
     }
   };
 
+  const saveMember = async (tagName: string, tagColor: string) => {
+    if (!identity || !data) return;
+    setMemberSaving(true);
+    setMemberError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}/member`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identityId: identity.id,
+          tagName,
+          tagColor,
+        }),
+      });
+      const payload = (await response.json()) as {
+        member?: EventMember;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.member) {
+        throw new Error(payload.error ?? "保存 Tag 失败");
+      }
+
+      const updatedMember = payload.member;
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              members: current.members.map((member) =>
+                member.id === updatedMember.id ? updatedMember : member,
+              ),
+              notes: current.notes.map((note) =>
+                note.memberId === updatedMember.id
+                  ? {
+                      ...note,
+                      authorTagName: updatedMember.tagName,
+                      authorTagColor: updatedMember.tagColor,
+                    }
+                  : note,
+              ),
+            }
+          : current,
+      );
+      setEditingMember(false);
+    } catch (caught) {
+      setMemberError(caught instanceof Error ? caught.message : "保存 Tag 失败");
+    } finally {
+      setMemberSaving(false);
+    }
+  };
+
   if (missingIdentity) {
     return <WorkspaceMessage title="需要先输入 ID" body="回到首页输入你的 ID，才能查看或加入这个事件。" />;
   }
@@ -445,16 +507,37 @@ export function EventWorkspace({ code }: { code: string }) {
               <span className="text-sm text-slate-400">{data.members.length}</span>
             </div>
             <div className="flex flex-wrap gap-2 lg:flex-col">
-              {data.members.map((member) => (
-                <div key={member.id} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: member.tagColor }} />
-                  <span className="min-w-0 truncate text-sm font-semibold text-slate-700">{member.tagName}</span>
-                  {member.isCurrent ? <span className="ml-auto text-xs font-medium text-[var(--accent)]">你</span> : null}
-                </div>
-              ))}
+              {data.members.map((member) =>
+                member.isCurrent ? (
+                  <button
+                    key={member.id}
+                    type="button"
+                    className="group flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-left transition hover:bg-slate-100 active:scale-[0.98] lg:w-full"
+                    onClick={() => {
+                      setMemberError("");
+                      setEditingMember(true);
+                    }}
+                    aria-label={`修改自己的 Tag：${member.tagName}`}
+                  >
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: member.tagColor }} />
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-700">{member.tagName}</span>
+                    <span className="ml-auto shrink-0 text-xs font-medium text-[var(--accent)]">你</span>
+                    <PencilSimpleIcon
+                      size={13}
+                      weight="bold"
+                      className="shrink-0 text-slate-300 transition group-hover:text-slate-500"
+                    />
+                  </button>
+                ) : (
+                  <div key={member.id} className="flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 lg:w-full">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: member.tagColor }} />
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-700">{member.tagName}</span>
+                  </div>
+                ),
+              )}
             </div>
             <p className="mt-4 text-xs leading-5 text-slate-500">
-              点击格子添加或移除自己的 Tag。星期标题里可以快速选择整段时间。
+              点击自己的 Tag 可修改名称和颜色。点击时间格添加或移除 Tag，星期标题可快速选择整段时间。
             </p>
 
             <section className="mt-5 border-t border-slate-100 pt-5">
@@ -667,7 +750,111 @@ export function EventWorkspace({ code }: { code: string }) {
           onDeleted={() => router.replace("/")}
         />
       ) : null}
+
+      {editingMember && ownMember ? (
+        <TagSettingsModal
+          member={ownMember}
+          saving={memberSaving}
+          error={memberError}
+          onClose={() => {
+            if (memberSaving) return;
+            setEditingMember(false);
+            setMemberError("");
+          }}
+          onSave={(tagName, tagColor) => void saveMember(tagName, tagColor)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function TagSettingsModal({
+  member,
+  saving,
+  error,
+  onClose,
+  onSave,
+}: {
+  member: EventMember;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (tagName: string, tagColor: string) => void;
+}) {
+  const [tagName, setTagName] = useState(member.tagName);
+  const [tagColor, setTagColor] = useState(member.tagColor);
+  const colorOptions: Array<{ name: string; value: string }> = TAG_COLOR_OPTIONS.some(
+    (option) => option.value === member.tagColor,
+  )
+    ? [...TAG_COLOR_OPTIONS]
+    : [{ name: "当前颜色", value: member.tagColor }, ...TAG_COLOR_OPTIONS];
+
+  return (
+    <Modal title="修改 Tag" onClose={onClose}>
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(tagName.trim(), tagColor);
+        }}
+      >
+        <div>
+          <label htmlFor="edit-tag-name" className="field-label">Tag 名称</label>
+          <input
+            id="edit-tag-name"
+            className="text-input"
+            value={tagName}
+            onChange={(event) => setTagName(event.target.value)}
+            autoFocus
+            maxLength={24}
+          />
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Tag 只在当前事件中展示，不会改变你的 ID/昵称。
+          </p>
+        </div>
+
+        <fieldset>
+          <legend className="field-label">Tag 颜色</legend>
+          <div className="grid grid-cols-5 gap-2">
+            {colorOptions.map((option) => {
+              const selected = tagColor.toUpperCase() === option.value.toUpperCase();
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`flex min-w-0 flex-col items-center gap-2 rounded-xl border px-1 py-2.5 text-[11px] font-medium transition active:scale-[0.96] ${
+                    selected
+                      ? "border-slate-400 bg-slate-50 text-slate-700 shadow-[0_0_0_2px_rgba(148,163,184,0.12)]"
+                      : "border-slate-200/80 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                  onClick={() => setTagColor(option.value)}
+                  aria-label={`选择${option.name}`}
+                  aria-pressed={selected}
+                >
+                  <span
+                    className="grid size-8 place-items-center rounded-full"
+                    style={{ backgroundColor: option.value }}
+                  >
+                    {selected ? <CheckIcon size={15} weight="bold" className="text-white" /> : null}
+                  </span>
+                  <span className="w-full truncate text-center">{option.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {error ? <p className="form-error">{error}</p> : null}
+
+        <button
+          type="submit"
+          className="primary-button w-full"
+          disabled={saving || !tagName.trim()}
+        >
+          {saving ? "正在保存" : "保存修改"}
+        </button>
+      </form>
+    </Modal>
   );
 }
 

@@ -52,6 +52,28 @@ try {
   }
   console.log("event create: ok");
 
+  const memberUpdateResponse = await fetch(
+    `${baseUrl}/api/events/${createResult.event.shareCode}/member`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        identityId,
+        tagName: "新名字",
+        tagColor: "#608575",
+      }),
+    },
+  );
+  const memberUpdate = await memberUpdateResponse.json();
+  if (
+    !memberUpdateResponse.ok ||
+    memberUpdate.member?.tagName !== "新名字" ||
+    memberUpdate.member?.tagColor !== "#608575"
+  ) {
+    throw new Error(`Member update failed: ${memberUpdate.error ?? memberUpdateResponse.statusText}`);
+  }
+  console.log("member tag name and color update: ok");
+
   for (const [index, tagName] of ["小林", "Mika", "阿雪"].entries()) {
     const otherIdentity = await post("/api/identity", {
       id: `ctb-${index}-${Date.now()}`,
@@ -155,8 +177,18 @@ try {
     !workspaceResponse.ok ||
     workspace.members.length !== 4 ||
     workspace.notes.length !== 2 ||
+    !workspace.members.some(
+      (member) =>
+        member.isCurrent &&
+        member.tagName === "新名字" &&
+        member.tagColor === "#608575",
+    ) ||
     !workspace.notes.some(
-      (note) => note.isCurrent && note.content === "修改后的备注",
+      (note) =>
+        note.isCurrent &&
+        note.authorTagName === "新名字" &&
+        note.authorTagColor === "#608575" &&
+        note.content === "修改后的备注",
     )
   ) {
     throw new Error("Workspace did not return all members.");

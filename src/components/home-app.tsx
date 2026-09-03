@@ -412,6 +412,9 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
         <div>
           <label htmlFor="create-tag" className="field-label">你的 Tag</label>
           <input id="create-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} maxLength={24} />
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Tag 用于事件内展示，可与 ID/昵称不同；进入事件后仍可修改名称和颜色。
+          </p>
         </div>
         <div>
           <label htmlFor="event-type" className="field-label">事件类型</label>
@@ -467,6 +470,9 @@ function JoinEventModal({ identity, onClose, onJoined }: { identity: Identity; o
         <div>
           <label htmlFor="join-tag" className="field-label">这个事件里的 Tag</label>
           <input id="join-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} maxLength={24} />
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Tag 仅在当前事件中展示，可与 ID/昵称不同，并可在加入后继续修改。
+          </p>
         </div>
         {error ? <p className="form-error">{error}</p> : null}
         <button type="submit" className="primary-button w-full" disabled={submitting || shareCode.length !== 6 || !tagName.trim()}>

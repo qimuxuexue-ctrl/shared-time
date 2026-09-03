@@ -2,17 +2,9 @@ import { randomInt } from "node:crypto";
 
 import { getBeijingDateString, getMondayDateString } from "@/lib/dates";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { TAG_COLOR_VALUES } from "@/lib/tag-colors";
 
 const SHARE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const TAG_COLORS = [
-  "#3578E5",
-  "#E16B5A",
-  "#3E9B73",
-  "#8B6CCF",
-  "#D28A37",
-  "#487C9E",
-  "#C35E86",
-];
 
 type JoinedEvent = {
   id: string;
@@ -45,7 +37,7 @@ export function pickTagColor(identityId: string) {
     0,
   );
 
-  return TAG_COLORS[score % TAG_COLORS.length];
+  return TAG_COLOR_VALUES[score % TAG_COLOR_VALUES.length];
 }
 
 export function isExpiredOneTimeEvent(event: {
