@@ -329,12 +329,9 @@ export function HomeApp() {
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
         {notifications.length > 0 ? (
-          <section
-            aria-label="事件新动态"
-            className="mb-7 overflow-hidden rounded-[20px] border border-blue-200/70 bg-white shadow-[0_16px_44px_rgba(76,111,173,0.1)]"
-          >
-            <div className="px-3 sm:px-4">
-              {visibleNotifications.map((notification, index) => {
+          <section aria-label="事件新动态" className="mb-9">
+            <div className="grid gap-2.5">
+              {visibleNotifications.map((notification) => {
                 const isActiveEvent =
                   notification.type === "participant" ||
                   notification.type === "note" ||
@@ -342,12 +339,12 @@ export function HomeApp() {
                 const content = (
                   <>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-slate-800">
+                      <span className="block truncate text-sm font-semibold text-[#243b57]">
                         {notification.eventName}
                       </span>
-                      <span className="mt-0.5 block text-sm text-slate-500">
+                      <span className="mt-0.5 block text-sm text-[#5d7490]">
                         {notificationLabels[notification.type]}
-                        <span className="ml-2 text-xs text-slate-400">
+                        <span className="ml-2 text-xs text-[#8296ad]">
                           {formatNotificationTime(notification.createdAt)}
                         </span>
                       </span>
@@ -356,7 +353,7 @@ export function HomeApp() {
                       <ArrowRightIcon
                         size={16}
                         weight="bold"
-                        className="shrink-0 text-blue-300 transition group-hover/notice:translate-x-0.5 group-hover/notice:text-blue-500"
+                        className="shrink-0 text-[#8da9c8] transition group-hover/notice:translate-x-0.5 group-hover/notice:text-[#557ca7]"
                       />
                     ) : null}
                   </>
@@ -365,26 +362,24 @@ export function HomeApp() {
                 return (
                   <div
                     key={notification.id}
-                    className={`flex items-center gap-2 border-slate-100 py-2.5 ${
-                      index > 0 ? "border-t" : ""
-                    }`}
+                    className="flex items-center gap-2 rounded-[16px] border border-[#d8e6f4] bg-[#eef5fc] px-2 py-2 shadow-[0_8px_24px_rgba(66,97,135,0.055)] transition-colors hover:border-[#caddef] hover:bg-[#eaf2fb]"
                   >
                     {isActiveEvent ? (
                       <Link
                         href={`/e/${notification.eventShareCode}`}
                         prefetch
-                        className="group/notice flex min-w-0 flex-1 items-center rounded-xl px-2 py-1.5 transition hover:bg-blue-50/60 active:scale-[0.99]"
+                        className="group/notice flex min-w-0 flex-1 items-center rounded-xl px-2.5 py-1.5 transition active:scale-[0.99]"
                       >
                         {content}
                       </Link>
                     ) : (
-                      <div className="flex min-w-0 flex-1 items-center px-2 py-1.5">
+                      <div className="flex min-w-0 flex-1 items-center px-2.5 py-1.5">
                         {content}
                       </div>
                     )}
                     <button
                       type="button"
-                      className="grid size-9 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 active:scale-95 disabled:opacity-40"
+                      className="grid size-9 shrink-0 place-items-center rounded-xl text-[#8198b3] transition hover:bg-white/75 hover:text-[#506d8d] active:scale-95 disabled:opacity-40"
                       onClick={() => void dismissNotification(notification)}
                       disabled={dismissingNotifications.has(notification.id)}
                       aria-label={`关闭关于 ${notification.eventName} 的动态`}
@@ -398,29 +393,31 @@ export function HomeApp() {
             </div>
 
             {notificationError ? (
-              <p className="border-t border-red-100 bg-red-50/70 px-5 py-2.5 text-xs text-red-600">
+              <p className="mt-2.5 rounded-xl border border-red-100 bg-red-50/80 px-4 py-2.5 text-xs text-red-600">
                 {notificationError}
               </p>
             ) : null}
 
             {notifications.length > 3 ? (
-              <button
-                type="button"
-                className="flex w-full items-center justify-center gap-1.5 border-t border-slate-100 px-4 py-3 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 active:bg-slate-100"
-                onClick={() => setNotificationsExpanded((current) => !current)}
-                aria-expanded={showAllNotifications}
-              >
-                {showAllNotifications
-                  ? "收起消息"
-                  : `展开另外 ${notifications.length - 3} 条`}
-                <CaretDownIcon
-                  size={15}
-                  weight="bold"
-                  className={`transition duration-200 ${
-                    showAllNotifications ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#d8e6f4] bg-[#f4f8fc] px-4 py-2.5 text-xs font-semibold text-[#617894] transition hover:border-[#caddef] hover:bg-[#eaf2fb] hover:text-[#415f80] active:scale-[0.98]"
+                  onClick={() => setNotificationsExpanded((current) => !current)}
+                  aria-expanded={showAllNotifications}
+                >
+                  {showAllNotifications
+                    ? "收起消息"
+                    : `展开另外 ${notifications.length - 3} 条`}
+                  <CaretDownIcon
+                    size={15}
+                    weight="bold"
+                    className={`transition duration-200 ${
+                      showAllNotifications ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+              </div>
             ) : null}
           </section>
         ) : null}
