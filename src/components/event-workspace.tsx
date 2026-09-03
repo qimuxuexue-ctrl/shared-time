@@ -2,6 +2,7 @@
 
 import {
   ArrowLeftIcon,
+  ArrowRightIcon,
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
@@ -23,12 +24,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
 
 import { DeleteEventModal } from "@/components/delete-event-modal";
 import { LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
-import { readStoredIdentity } from "@/lib/browser-identity";
+import { readStoredIdentity, storeIdentity } from "@/lib/browser-identity";
 import {
   addDaysToDateString,
   getBeijingDateString,
@@ -124,6 +126,7 @@ export function EventWorkspace({ code }: { code: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [missingIdentity, setMissingIdentity] = useState(false);
+  const [joinRequired, setJoinRequired] = useState(false);
   const [openPresetDay, setOpenPresetDay] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -155,6 +158,12 @@ export function EventWorkspace({ code }: { code: string }) {
           error?: string;
         };
 
+        if (response.status === 403) {
+          setJoinRequired(true);
+          setError("");
+          return;
+        }
+
         if (!response.ok) {
           throw new Error(payload.error ?? "无法读取事件");
         }
@@ -180,6 +189,7 @@ export function EventWorkspace({ code }: { code: string }) {
           : payload;
         dataRef.current = nextData;
         setData(nextData);
+        setJoinRequired(false);
         if (payload.weekStart !== requestedWeek) {
           setWeekStart(payload.weekStart);
         }
@@ -533,8 +543,63 @@ export function EventWorkspace({ code }: { code: string }) {
     }
   };
 
-  if (missingIdentity) {
-    return <WorkspaceMessage title="需要先输入 ID" body="回到首页输入你的 ID，才能查看或加入这个事件。" />;
+  const joinFromSharedLink = async (displayId: string, tagName: string) => {
+    let activeIdentity = identity;
+
+    if (!activeIdentity) {
+      const identityResponse = await fetch("/api/identity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: displayId }),
+      });
+      const identityPayload = (await identityResponse.json()) as {
+        identity?: Identity;
+        error?: string;
+      };
+
+      if (!identityResponse.ok || !identityPayload.identity) {
+        throw new Error(identityPayload.error ?? "无法建立这个 ID");
+      }
+      activeIdentity = identityPayload.identity;
+      storeIdentity(activeIdentity);
+    }
+
+    const joinResponse = await fetch("/api/events/join", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        identityId: activeIdentity.id,
+        shareCode: code,
+        tagName,
+      }),
+    });
+    const joinPayload = (await joinResponse.json()) as { error?: string };
+
+    if (!joinResponse.ok) {
+      throw new Error(joinPayload.error ?? "加入事件失败");
+    }
+
+    storeIdentity(activeIdentity);
+    setMissingIdentity(false);
+    setJoinRequired(false);
+
+    if (!identity) {
+      setLoading(true);
+      setIdentity(activeIdentity);
+      return;
+    }
+
+    await loadWorkspace(activeIdentity, weekStart);
+  };
+
+  if (missingIdentity || joinRequired) {
+    return (
+      <SharedLinkEntry
+        code={code}
+        identity={identity}
+        onJoin={joinFromSharedLink}
+      />
+    );
   }
 
   if (loading) {
@@ -902,6 +967,125 @@ export function EventWorkspace({ code }: { code: string }) {
           onSave={(tagName, tagColor) => void saveMember(tagName, tagColor)}
         />
       ) : null}
+    </main>
+  );
+}
+
+function SharedLinkEntry({
+  code,
+  identity,
+  onJoin,
+}: {
+  code: string;
+  identity: Identity | null;
+  onJoin: (displayId: string, tagName: string) => Promise<void>;
+}) {
+  const [displayId, setDisplayId] = useState(identity?.displayId ?? "");
+  const [tagName, setTagName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setFormError("");
+
+    try {
+      await onJoin(displayId.trim(), tagName.trim());
+    } catch (caught) {
+      setFormError(
+        caught instanceof Error ? caught.message : "加入事件失败，请稍后重试",
+      );
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="grid min-h-[100dvh] place-items-center bg-[var(--page)] px-5 py-12">
+      <section className="w-full max-w-[430px]">
+        <div className="mb-6">
+          <p className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-mono text-xs font-semibold tracking-[0.08em] text-slate-500 shadow-[0_8px_24px_rgba(67,83,108,0.06)]">
+            <HashIcon size={13} weight="bold" />
+            {code}
+          </p>
+          <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950">
+            加入共享事件
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            {identity
+              ? `你将以 ${identity.displayId} 的身份加入，只需设置本事件中显示的 Tag。`
+              : "首次使用请先设置你的 ID/昵称和本事件 Tag，完成后会直接进入时间表。"}
+          </p>
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="rounded-[22px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_60px_rgba(67,83,108,0.08)] sm:p-6"
+        >
+          {!identity ? (
+            <div>
+              <label htmlFor="shared-link-id" className="field-label">
+                你的 ID/昵称
+              </label>
+              <input
+                id="shared-link-id"
+                className="text-input"
+                value={displayId}
+                onChange={(event) => setDisplayId(event.target.value)}
+                placeholder="例如 小王2026"
+                autoComplete="username"
+                autoFocus
+                maxLength={24}
+              />
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                下次回来仍可使用这个 ID/昵称找回参与的事件。
+              </p>
+            </div>
+          ) : null}
+
+          <div className={identity ? "" : "mt-5"}>
+            <label htmlFor="shared-link-tag" className="field-label">
+              这个事件里的 Tag
+            </label>
+            <input
+              id="shared-link-tag"
+              className="text-input"
+              value={tagName}
+              onChange={(event) => setTagName(event.target.value)}
+              placeholder="例如 雪雪"
+              autoFocus={Boolean(identity)}
+              maxLength={24}
+            />
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Tag 仅在当前事件中展示，加入后仍可修改名称和颜色。
+            </p>
+          </div>
+
+          {formError ? <p className="form-error">{formError}</p> : null}
+
+          <button
+            type="submit"
+            className="primary-button mt-5 w-full"
+            disabled={
+              submitting ||
+              (!identity && displayId.trim().length < 2) ||
+              !tagName.trim()
+            }
+          >
+            {submitting ? "正在进入" : "加入并查看时间表"}
+            {!submitting ? <ArrowRightIcon size={18} weight="bold" /> : null}
+          </button>
+        </form>
+
+        <div className="mt-5 text-center">
+          <Link
+            href="/"
+            className="text-sm font-medium text-slate-500 transition hover:text-slate-800"
+          >
+            返回首页
+          </Link>
+        </div>
+      </section>
     </main>
   );
 }
