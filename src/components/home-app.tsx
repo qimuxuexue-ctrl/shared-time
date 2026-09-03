@@ -13,11 +13,13 @@ import {
   UsersThreeIcon,
 } from "@phosphor-icons/react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/modal";
 import { DeleteEventModal } from "@/components/delete-event-modal";
+import { LoadingScreen } from "@/components/loading-screen";
 import { UsageGuide } from "@/components/usage-guide";
 import {
   clearStoredIdentity,
@@ -106,14 +108,7 @@ export function HomeApp() {
   };
 
   if (status === "checking") {
-    return (
-      <main className="grid min-h-[100dvh] place-items-center bg-[var(--page)] px-5">
-        <div className="w-full max-w-sm space-y-4" aria-label="正在恢复身份">
-          <div className="h-8 w-40 animate-pulse rounded-xl bg-slate-200" />
-          <div className="h-44 animate-pulse rounded-[22px] bg-white" />
-        </div>
-      </main>
-    );
+    return <LoadingScreen />;
   }
 
   if (status === "signed-out" || !identity) {
@@ -248,10 +243,10 @@ export function HomeApp() {
                 key={event.id}
                 className="group relative rounded-[22px] border border-slate-200/80 bg-white shadow-[0_14px_42px_rgba(67,83,108,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)]"
               >
-                <button
-                  type="button"
-                  onClick={() => router.push(`/e/${event.shareCode}`)}
-                  className="w-full rounded-[22px] p-5 text-left active:bg-slate-50/70"
+                <Link
+                  href={`/e/${event.shareCode}`}
+                  prefetch
+                  className="block w-full rounded-[22px] p-5 text-left active:bg-slate-50/70"
                 >
                   <div className={`mb-6 ${event.isCreator ? "pr-20" : "pr-9"}`}>
                     <div className="min-w-0">
@@ -295,7 +290,7 @@ export function HomeApp() {
                     weight="bold"
                     className="pointer-events-none absolute right-4 top-[1.35rem] text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]"
                   />
-                </button>
+                </Link>
                 {event.isCreator ? (
                   <button
                     type="button"
@@ -378,7 +373,7 @@ function GuideButton({
 
 function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity; onClose: () => void; onCreated: (event: EventSummary) => void }) {
   const [name, setName] = useState("");
-  const [tagName, setTagName] = useState(identity.displayId);
+  const [tagName, setTagName] = useState("");
   const [eventType, setEventType] = useState<EventType>("one_time");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -411,7 +406,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
         </div>
         <div>
           <label htmlFor="create-tag" className="field-label">你的 Tag</label>
-          <input id="create-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} maxLength={24} />
+          <input id="create-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} placeholder="例如 雪雪" maxLength={24} />
           <p className="mt-2 text-xs leading-5 text-slate-500">
             Tag 用于事件内展示，可与 ID/昵称不同；进入事件后仍可修改名称和颜色。
           </p>
@@ -437,7 +432,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
 
 function JoinEventModal({ identity, onClose, onJoined }: { identity: Identity; onClose: () => void; onJoined: (event: EventSummary) => void }) {
   const [shareCode, setShareCode] = useState("");
-  const [tagName, setTagName] = useState(identity.displayId);
+  const [tagName, setTagName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -469,7 +464,7 @@ function JoinEventModal({ identity, onClose, onJoined }: { identity: Identity; o
         </div>
         <div>
           <label htmlFor="join-tag" className="field-label">这个事件里的 Tag</label>
-          <input id="join-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} maxLength={24} />
+          <input id="join-tag" className="text-input" value={tagName} onChange={(event) => setTagName(event.target.value)} placeholder="例如 雪雪" maxLength={24} />
           <p className="mt-2 text-xs leading-5 text-slate-500">
             Tag 仅在当前事件中展示，可与 ID/昵称不同，并可在加入后继续修改。
           </p>

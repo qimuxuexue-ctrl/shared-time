@@ -21,10 +21,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import { DeleteEventModal } from "@/components/delete-event-modal";
+import { LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
 import { readStoredIdentity } from "@/lib/browser-identity";
 import {
@@ -116,6 +118,12 @@ export function EventWorkspace({ code }: { code: string }) {
   const [editingMember, setEditingMember] = useState(false);
   const [memberSaving, setMemberSaving] = useState(false);
   const [memberError, setMemberError] = useState("");
+  const dataRef = useRef<EventWorkspaceData | null>(null);
+  const savedAvailabilityRef = useRef<AvailabilitySlot[]>([]);
+  const pendingUpdatesRef = useRef(new Map<string, SlotUpdate>());
+  const saveTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const flushPendingUpdatesRef = useRef<() => Promise<void>>(async () => {});
 
   const loadWorkspace = useCallback(
     async (activeIdentity: Identity, requestedWeek: string, silent = false) => {
@@ -135,7 +143,27 @@ export function EventWorkspace({ code }: { code: string }) {
           throw new Error(payload.error ?? "无法读取事件");
         }
 
-        setData(payload);
+        if (
+          silent &&
+          (saveInFlightRef.current || pendingUpdatesRef.current.size > 0)
+        ) {
+          return;
+        }
+
+        savedAvailabilityRef.current = payload.availability;
+        const pendingUpdates = Array.from(pendingUpdatesRef.current.values());
+        const nextData = pendingUpdates.length
+          ? {
+              ...payload,
+              availability: applyUpdates(
+                payload.availability,
+                payload.currentMemberId,
+                pendingUpdates,
+              ),
+            }
+          : payload;
+        dataRef.current = nextData;
+        setData(nextData);
         if (payload.weekStart !== requestedWeek) {
           setWeekStart(payload.weekStart);
         }
@@ -186,6 +214,21 @@ export function EventWorkspace({ code }: { code: string }) {
     };
   }, [identity, loadWorkspace, weekStart]);
 
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+      if (
+        pendingUpdatesRef.current.size > 0 &&
+        !saveInFlightRef.current
+      ) {
+        void flushPendingUpdatesRef.current();
+      }
+    },
+    [],
+  );
+
   const dates = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDaysToDateString(weekStart, index)),
     [weekStart],
@@ -217,33 +260,116 @@ export function EventWorkspace({ code }: { code: string }) {
     [data?.members],
   );
 
-  const saveUpdates = async (updates: SlotUpdate[]) => {
-    if (!identity || !data || updates.length === 0) return;
+  const flushPendingUpdates = useCallback(async () => {
+    const currentData = dataRef.current;
+    if (
+      !identity ||
+      !currentData ||
+      saveInFlightRef.current ||
+      pendingUpdatesRef.current.size === 0
+    ) {
+      return;
+    }
 
-    const previous = data.availability;
-    setData({
-      ...data,
-      availability: applyUpdates(previous, data.currentMemberId, updates),
-    });
-    setSaving(true);
-    setError("");
+    saveInFlightRef.current = true;
+    const updates = Array.from(pendingUpdatesRef.current.values());
 
     try {
       const response = await fetch(`/api/events/${code}/availability`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ identityId: identity.id, updates }),
+        keepalive: true,
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "保存失败");
-    } catch (caught) {
-      setData((current) =>
-        current ? { ...current, availability: previous } : current,
+
+      savedAvailabilityRef.current = applyUpdates(
+        savedAvailabilityRef.current,
+        currentData.currentMemberId,
+        updates,
       );
+      for (const update of updates) {
+        const key = slotKey(update.date, update.startHour);
+        const latest = pendingUpdatesRef.current.get(key);
+        if (latest?.available === update.available) {
+          pendingUpdatesRef.current.delete(key);
+        }
+      }
+      setError("");
+    } catch (caught) {
+      for (const update of updates) {
+        const key = slotKey(update.date, update.startHour);
+        const latest = pendingUpdatesRef.current.get(key);
+        if (latest?.available === update.available) {
+          pendingUpdatesRef.current.delete(key);
+        }
+      }
+
+      setData((current) => {
+        if (!current) return current;
+        const next = {
+          ...current,
+          availability: applyUpdates(
+            savedAvailabilityRef.current,
+            current.currentMemberId,
+            Array.from(pendingUpdatesRef.current.values()),
+          ),
+        };
+        dataRef.current = next;
+        return next;
+      });
       setError(caught instanceof Error ? caught.message : "保存失败");
     } finally {
-      setSaving(false);
+      saveInFlightRef.current = false;
+      if (pendingUpdatesRef.current.size > 0) {
+        saveTimerRef.current = window.setTimeout(() => {
+          saveTimerRef.current = null;
+          void flushPendingUpdatesRef.current();
+        }, 80);
+      } else {
+        setSaving(false);
+      }
     }
+  }, [code, identity]);
+
+  useEffect(() => {
+    flushPendingUpdatesRef.current = flushPendingUpdates;
+  }, [flushPendingUpdates]);
+
+  const saveUpdates = (updates: SlotUpdate[]) => {
+    if (!identity || updates.length === 0) return;
+
+    for (const update of updates) {
+      pendingUpdatesRef.current.set(
+        slotKey(update.date, update.startHour),
+        update,
+      );
+    }
+
+    setData((current) => {
+      if (!current) return current;
+      const next = {
+        ...current,
+        availability: applyUpdates(
+          current.availability,
+          current.currentMemberId,
+          updates,
+        ),
+      };
+      dataRef.current = next;
+      return next;
+    });
+    setSaving(true);
+    setError("");
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void flushPendingUpdatesRef.current();
+    }, 320);
   };
 
   const toggleSlot = (date: string, startHour: number) => {
@@ -251,7 +377,7 @@ export function EventWorkspace({ code }: { code: string }) {
     const selected = (membersBySlot.get(slotKey(date, startHour)) ?? []).some(
       (member) => member.id === data.currentMemberId,
     );
-    void saveUpdates([{ date, startHour, available: !selected }]);
+    saveUpdates([{ date, startHour, available: !selected }]);
   };
 
   const applyPreset = (date: string, start: number, end: number) => {
@@ -267,7 +393,7 @@ export function EventWorkspace({ code }: { code: string }) {
     }
 
     setOpenPresetDay(null);
-    void saveUpdates(updates);
+    saveUpdates(updates);
   };
 
   const clearDay = (date: string) => {
@@ -286,7 +412,7 @@ export function EventWorkspace({ code }: { code: string }) {
       }));
 
     setOpenPresetDay(null);
-    void saveUpdates(updates);
+    saveUpdates(updates);
   };
 
   const beginNoteEditing = () => {
@@ -396,17 +522,7 @@ export function EventWorkspace({ code }: { code: string }) {
   }
 
   if (loading) {
-    return (
-      <main className="min-h-[100dvh] bg-[var(--page)] p-5 sm:p-8">
-        <div className="mx-auto max-w-7xl animate-pulse space-y-5">
-          <div className="h-16 rounded-[18px] bg-white" />
-          <div className="grid gap-5 lg:grid-cols-[230px_1fr]">
-            <div className="h-72 rounded-[18px] bg-white" />
-            <div className="h-[720px] rounded-[18px] bg-white" />
-          </div>
-        </div>
-      </main>
-    );
+    return <LoadingScreen />;
   }
 
   if (!data) {
@@ -680,7 +796,7 @@ export function EventWorkspace({ code }: { code: string }) {
                       const past = valid && isPastSlot(date, hour);
                       const slotMembers = membersBySlot.get(slotKey(date, hour)) ?? [];
                       const ownSelected = slotMembers.some((member) => member.id === data.currentMemberId);
-                      const disabled = !valid || past || data.event.status !== "active" || saving;
+                      const disabled = !valid || past || data.event.status !== "active";
 
                       if (!valid) {
                         return <div key={date} className="min-h-[68px] border-l border-slate-100 bg-slate-50/45" />;

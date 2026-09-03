@@ -45,6 +45,17 @@ button:disabled {
   background: rgb(52 120 246 / 18%);
 }
 
+@keyframes loading-tiger-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-tiger {
+  animation: loading-tiger-spin 1.6s linear infinite;
+  will-change: transform;
+}
+
 @layer components {
   .primary-button {
     display: inline-flex;
