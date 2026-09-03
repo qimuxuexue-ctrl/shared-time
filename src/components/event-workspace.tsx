@@ -43,6 +43,7 @@ import type {
   AvailabilitySlot,
   EventMember,
   EventNote,
+  EventSummary,
   EventWorkspaceData,
   Identity,
 } from "@/lib/types";
@@ -152,6 +153,7 @@ export function EventWorkspace({ code }: { code: string }) {
         const query = new URLSearchParams({
           identityId: activeIdentity.id,
           weekStart: requestedWeek,
+          markRead: silent ? "0" : "1",
         });
         const response = await fetch(`/api/events/${code}?${query}`);
         const payload = (await response.json()) as EventWorkspaceData & {
@@ -554,6 +556,7 @@ export function EventWorkspace({ code }: { code: string }) {
       });
       const identityPayload = (await identityResponse.json()) as {
         identity?: Identity;
+        events?: EventSummary[];
         error?: string;
       };
 
@@ -561,6 +564,23 @@ export function EventWorkspace({ code }: { code: string }) {
         throw new Error(identityPayload.error ?? "无法建立这个 ID");
       }
       activeIdentity = identityPayload.identity;
+
+      const existingMembership = identityPayload.events?.some(
+        (event) => event.shareCode === code,
+      );
+
+      if (existingMembership) {
+        storeIdentity(activeIdentity);
+        setMissingIdentity(false);
+        setJoinRequired(false);
+        setLoading(true);
+        setIdentity(activeIdentity);
+        return;
+      }
+
+      if (!tagName.trim()) {
+        throw new Error("这是你首次加入该事件，请先设置本事件的 Tag");
+      }
       storeIdentity(activeIdentity);
     }
 
@@ -1014,7 +1034,7 @@ function SharedLinkEntry({
           <p className="mt-3 text-sm leading-6 text-slate-500">
             {identity
               ? `你将以 ${identity.displayId} 的身份加入，只需设置本事件中显示的 Tag。`
-              : "首次使用请先设置你的 ID/昵称和本事件 Tag，完成后会直接进入时间表。"}
+              : "本机没有保存身份记录。输入曾使用的 ID/昵称可以找回参与记录；如果是首次参加，请同时设置本事件的 Tag。"}
           </p>
         </div>
 
@@ -1038,14 +1058,14 @@ function SharedLinkEntry({
                 maxLength={24}
               />
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                下次回来仍可使用这个 ID/昵称找回参与的事件。
+                系统会先查找已有身份；找到本事件的参与记录后会直接进入。
               </p>
             </div>
           ) : null}
 
           <div className={identity ? "" : "mt-5"}>
             <label htmlFor="shared-link-tag" className="field-label">
-              这个事件里的 Tag
+              这个事件里的 Tag{!identity ? "（首次加入时填写）" : ""}
             </label>
             <input
               id="shared-link-tag"
@@ -1057,7 +1077,9 @@ function SharedLinkEntry({
               maxLength={24}
             />
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              Tag 仅在当前事件中展示，加入后仍可修改名称和颜色。
+              {!identity
+                ? "曾经参加过本事件可留空；首次加入时，Tag 仅在当前事件中展示。"
+                : "Tag 仅在当前事件中展示，加入后仍可修改名称和颜色。"}
             </p>
           </div>
 
@@ -1069,10 +1091,14 @@ function SharedLinkEntry({
             disabled={
               submitting ||
               (!identity && displayId.trim().length < 2) ||
-              !tagName.trim()
+              (Boolean(identity) && !tagName.trim())
             }
           >
-            {submitting ? "正在进入" : "加入并查看时间表"}
+            {submitting
+              ? "正在查找"
+              : identity
+                ? "加入并查看时间表"
+                : "找回或加入事件"}
             {!submitting ? <ArrowRightIcon size={18} weight="bold" /> : null}
           </button>
         </form>

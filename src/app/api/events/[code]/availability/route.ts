@@ -132,5 +132,24 @@ export async function PUT(
     }
   }
 
+  const activityAt = new Date().toISOString();
+  const [{ error: activityError }, { error: readError }] = await Promise.all([
+    supabaseAdmin
+      .from("events")
+      .update({ last_availability_activity_at: activityAt })
+      .eq("id", event.id),
+    supabaseAdmin
+      .from("event_members")
+      .update({ last_viewed_at: activityAt })
+      .eq("id", member.id),
+  ]);
+
+  if (activityError || readError) {
+    console.error(
+      "Unable to record availability activity",
+      activityError ?? readError,
+    );
+  }
+
   return Response.json({ ok: true });
 }

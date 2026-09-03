@@ -16,6 +16,9 @@ type JoinedEvent = {
   status: "active" | "closed" | "archived";
   creator_identity_id: string;
   created_at: string;
+  last_member_activity_at: string | null;
+  last_note_activity_at: string | null;
+  last_availability_activity_at: string | null;
 };
 
 type ParticipantRow = {
@@ -23,6 +26,14 @@ type ParticipantRow = {
   event_id: string;
   tag_name: string;
   tag_color: string;
+};
+
+type MembershipRow = {
+  id: string;
+  tag_name: string;
+  tag_color: string;
+  last_viewed_at?: string;
+  events: unknown;
 };
 
 export function createShareCode() {
@@ -84,18 +95,32 @@ export async function getEventParticipants(eventId: string) {
 export async function getIdentityEvents(identityId: string) {
   await cleanupExpiredOneTimeEvents();
 
-  const { data, error } = await supabaseAdmin
+  const membershipsResult = await supabaseAdmin
     .from("event_members")
     .select(
-      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at)",
+      "id, tag_name, tag_color, last_viewed_at, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at, last_member_activity_at, last_note_activity_at, last_availability_activity_at)",
     )
     .eq("identity_id", identityId);
 
-  if (error) {
-    throw new Error("Unable to load identity events.");
+  let notificationsEnabled = true;
+  let memberships: MembershipRow[];
+  if (membershipsResult.error) {
+    notificationsEnabled = false;
+    const fallbackResult = await supabaseAdmin
+      .from("event_members")
+      .select(
+        "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at)",
+      )
+      .eq("identity_id", identityId);
+    if (fallbackResult.error) {
+      throw new Error("Unable to load identity events.");
+    }
+    memberships = (fallbackResult.data ?? []) as MembershipRow[];
+  } else {
+    memberships = (membershipsResult.data ?? []) as MembershipRow[];
   }
 
-  const eventIds = (data ?? []).map(
+  const eventIds = memberships.map(
     (membership) => (membership.events as unknown as JoinedEvent).id,
   );
   const participantsByEvent = new Map<string, ParticipantRow[]>();
@@ -119,15 +144,31 @@ export async function getIdentityEvents(identityId: string) {
     }
   }
 
-  return (data ?? [])
+  return memberships
     .map((membership) => {
       const event = membership.events as unknown as JoinedEvent;
+      const lastViewedAt = notificationsEnabled
+        ? Date.parse(membership.last_viewed_at ?? "")
+        : Number.POSITIVE_INFINITY;
       const participants = (participantsByEvent.get(event.id) ?? []).map(
         (participant) => ({
           id: participant.id,
           tagName: participant.tag_name,
           tagColor: participant.tag_color,
         }),
+      );
+      const unreadUpdates = [
+        {
+          type: "participant" as const,
+          updatedAt: event.last_member_activity_at,
+        },
+        { type: "note" as const, updatedAt: event.last_note_activity_at },
+        {
+          type: "timeline" as const,
+          updatedAt: event.last_availability_activity_at,
+        },
+      ].flatMap(({ type, updatedAt }) =>
+        updatedAt && Date.parse(updatedAt) > lastViewedAt ? [type] : [],
       );
 
       return {
@@ -145,6 +186,7 @@ export async function getIdentityEvents(identityId: string) {
         isCreator: event.creator_identity_id === identityId,
         participantCount: participants.length,
         participants,
+        unreadUpdates,
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

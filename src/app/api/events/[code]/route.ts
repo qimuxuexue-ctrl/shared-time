@@ -16,6 +16,7 @@ const querySchema = z.object({
     .string()
     .refine(isValidDateString, "周起始日期不正确")
     .optional(),
+  markRead: z.enum(["0", "1"]).optional(),
 });
 
 const deleteSchema = z.object({
@@ -37,6 +38,7 @@ export async function GET(
   const parsed = querySchema.safeParse({
     identityId: searchParams.get("identityId"),
     weekStart: searchParams.get("weekStart") ?? undefined,
+    markRead: searchParams.get("markRead") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -80,6 +82,17 @@ export async function GET(
       { error: "你还没有加入这个事件" },
       { status: 403 },
     );
+  }
+
+  if (parsed.data.markRead === "1") {
+    const { error: readError } = await supabaseAdmin
+      .from("event_members")
+      .update({ last_viewed_at: new Date().toISOString() })
+      .eq("id", currentMember.id);
+
+    if (readError) {
+      console.error("Unable to mark event as read", readError);
+    }
   }
 
   const currentWeekStart = getMondayDateString(getBeijingDateString());

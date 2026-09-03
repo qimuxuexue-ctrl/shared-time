@@ -5,6 +5,8 @@ export type Identity = {
 
 export type EventType = "one_time" | "ongoing";
 
+export type EventUpdateType = "participant" | "note" | "timeline";
+
 export type EventParticipantSummary = {
   id: string;
   tagName: string;
@@ -26,6 +28,7 @@ export type EventSummary = {
   isCreator: boolean;
   participantCount: number;
   participants: EventParticipantSummary[];
+  unreadUpdates: EventUpdateType[];
 };
 
 export type EventMember = {

@@ -30,6 +30,9 @@ create table if not exists public.events (
   weeks_ahead smallint not null default 4,
   event_type text not null default 'ongoing',
   status text not null default 'active',
+  last_member_activity_at timestamptz,
+  last_note_activity_at timestamptz,
+  last_availability_activity_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   constraint events_share_code_format check (share_code ~ '^[A-Z0-9]{6}$'),
@@ -49,12 +52,18 @@ alter table public.events
   add constraint events_event_type_values
   check (event_type in ('one_time', 'ongoing'));
 
+alter table public.events
+  add column if not exists last_member_activity_at timestamptz,
+  add column if not exists last_note_activity_at timestamptz,
+  add column if not exists last_availability_activity_at timestamptz;
+
 create table if not exists public.event_members (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events(id) on delete cascade,
   identity_id uuid not null references public.identities(id) on delete cascade,
   tag_name text not null,
   tag_color text not null default '#3B82F6',
+  last_viewed_at timestamptz not null default timezone('utc', now()),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   constraint event_members_tag_name_length check (char_length(tag_name) between 1 and 24),
@@ -62,6 +71,10 @@ create table if not exists public.event_members (
   constraint event_members_identity_unique unique (event_id, identity_id),
   constraint event_members_id_event_unique unique (id, event_id)
 );
+
+alter table public.event_members
+  add column if not exists last_viewed_at timestamptz not null
+  default timezone('utc', now());
 
 create table if not exists public.availabilities (
   id uuid primary key default gen_random_uuid(),

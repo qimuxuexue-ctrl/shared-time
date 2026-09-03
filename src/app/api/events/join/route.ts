@@ -90,6 +90,7 @@ export async function POST(request: Request) {
         isCreator: event.creator_identity_id === identityId,
         participantCount: participants.length,
         participants,
+        unreadUpdates: [],
       },
       alreadyJoined: true,
     });
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "这个事件已经停止加入" }, { status: 409 });
   }
 
+  const activityAt = new Date().toISOString();
   const { data: member, error: memberError } = await supabaseAdmin
     .from("event_members")
     .insert({
@@ -112,6 +114,24 @@ export async function POST(request: Request) {
 
   if (memberError || !member) {
     return serverError("加入事件失败，请稍后重试");
+  }
+
+  const [{ error: activityError }, { error: readError }] = await Promise.all([
+    supabaseAdmin
+      .from("events")
+      .update({ last_member_activity_at: activityAt })
+      .eq("id", event.id),
+    supabaseAdmin
+      .from("event_members")
+      .update({ last_viewed_at: activityAt })
+      .eq("id", member.id),
+  ]);
+
+  if (activityError || readError) {
+    console.error(
+      "Unable to record member activity",
+      activityError ?? readError,
+    );
   }
 
   const participants = await getEventParticipants(event.id);
@@ -133,6 +153,7 @@ export async function POST(request: Request) {
         isCreator: event.creator_identity_id === identityId,
         participantCount: participants.length,
         participants,
+        unreadUpdates: [],
       },
       alreadyJoined: false,
     },

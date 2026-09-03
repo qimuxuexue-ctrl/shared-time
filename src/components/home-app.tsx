@@ -2,6 +2,7 @@
 
 import {
   ArrowRightIcon,
+  BellRingingIcon,
   CalendarBlankIcon,
   ClockIcon,
   HashIcon,
@@ -26,7 +27,12 @@ import {
   readStoredIdentity,
   storeIdentity,
 } from "@/lib/browser-identity";
-import type { EventSummary, EventType, Identity } from "@/lib/types";
+import type {
+  EventSummary,
+  EventType,
+  EventUpdateType,
+  Identity,
+} from "@/lib/types";
 
 type IdentityResponse = {
   identity: Identity;
@@ -40,6 +46,16 @@ async function readJson<T>(response: Response): Promise<T> {
     throw new Error(payload.error ?? "请求失败，请稍后重试");
   }
   return payload;
+}
+
+const updateLabels: Record<EventUpdateType, string> = {
+  participant: "有新参与者加入",
+  note: "备注有更新",
+  timeline: "空闲时间有更新",
+};
+
+function describeUpdates(event: EventSummary) {
+  return event.unreadUpdates.map((type) => updateLabels[type]).join("、");
 }
 
 export function HomeApp() {
@@ -79,6 +95,18 @@ export function HomeApp() {
     }
   }, []);
 
+  const refreshEvents = useCallback(async (activeIdentity: Identity) => {
+    try {
+      const response = await fetch(
+        `/api/events?identityId=${encodeURIComponent(activeIdentity.id)}`,
+      );
+      const payload = await readJson<{ events: EventSummary[] }>(response);
+      setEvents(payload.events);
+    } catch {
+      // Keep the current cards visible when a background refresh fails.
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
@@ -97,6 +125,19 @@ export function HomeApp() {
       active = false;
     };
   }, [signIn]);
+
+  useEffect(() => {
+    if (!identity || status !== "ready") return;
+
+    const refresh = () => void refreshEvents(identity);
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [identity, refreshEvents, status]);
 
   const signOut = () => {
     clearStoredIdentity();
@@ -175,6 +216,10 @@ export function HomeApp() {
     );
   }
 
+  const eventsWithUpdates = events.filter(
+    (event) => event.unreadUpdates.length > 0,
+  );
+
   return (
     <main className="min-h-[100dvh] bg-[var(--page)]">
       <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
@@ -204,6 +249,56 @@ export function HomeApp() {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        {eventsWithUpdates.length > 0 ? (
+          <section
+            aria-label="事件新动态"
+            className="mb-7 rounded-[20px] border border-blue-200/70 bg-white px-4 py-4 shadow-[0_16px_44px_rgba(76,111,173,0.1)] sm:px-5"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-blue-50 text-blue-600">
+                <BellRingingIcon size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    {eventsWithUpdates.length} 个事件有新动态
+                  </h2>
+                  <span className="shrink-0 text-xs font-medium text-slate-400">
+                    打开后标为已读
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-1.5 lg:grid-cols-2">
+                  {eventsWithUpdates.slice(0, 4).map((event) => (
+                    <Link
+                      key={event.id}
+                      href={`/e/${event.shareCode}`}
+                      prefetch
+                      className="group/update flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 text-sm transition hover:bg-blue-50/70 active:scale-[0.99]"
+                    >
+                      <span className="max-w-40 shrink-0 truncate font-semibold text-slate-700">
+                        {event.name}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-slate-500">
+                        {describeUpdates(event)}
+                      </span>
+                      <ArrowRightIcon
+                        size={15}
+                        weight="bold"
+                        className="shrink-0 text-blue-300 transition group-hover/update:translate-x-0.5 group-hover/update:text-blue-500"
+                      />
+                    </Link>
+                  ))}
+                </div>
+                {eventsWithUpdates.length > 4 ? (
+                  <p className="mt-2 px-2 text-xs text-slate-400">
+                    另有 {eventsWithUpdates.length - 4} 个事件出现更新
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500">
@@ -241,7 +336,11 @@ export function HomeApp() {
             {events.map((event) => (
               <article
                 key={event.id}
-                className="group relative rounded-[22px] border border-slate-200/80 bg-white shadow-[0_14px_42px_rgba(67,83,108,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)]"
+                className={`group relative rounded-[22px] border bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)] ${
+                  event.unreadUpdates.length > 0
+                    ? "border-blue-200/90 shadow-[0_14px_42px_rgba(76,111,173,0.09)] hover:border-blue-300"
+                    : "border-slate-200/80 shadow-[0_14px_42px_rgba(67,83,108,0.06)] hover:border-slate-300"
+                }`}
               >
                 <Link
                   href={`/e/${event.shareCode}`}
@@ -250,9 +349,17 @@ export function HomeApp() {
                 >
                   <div className={`mb-6 ${event.isCreator ? "pr-20" : "pr-9"}`}>
                     <div className="min-w-0">
-                      <h2 className="truncate text-xl font-semibold tracking-tight text-slate-950">
-                        {event.name}
-                      </h2>
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <h2 className="min-w-0 truncate text-xl font-semibold tracking-tight text-slate-950">
+                          {event.name}
+                        </h2>
+                        {event.unreadUpdates.length > 0 ? (
+                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600">
+                            <span className="size-1.5 rounded-full bg-blue-500" />
+                            新动态
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
                         <HashIcon size={14} weight="bold" />
                         {event.shareCode}

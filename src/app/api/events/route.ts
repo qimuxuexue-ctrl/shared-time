@@ -123,6 +123,7 @@ export async function POST(request: Request) {
               tagColor: member.tag_color,
             },
           ],
+          unreadUpdates: [],
         },
       },
       { status: 201 },
