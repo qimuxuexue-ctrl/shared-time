@@ -53,6 +53,14 @@ type SlotUpdate = {
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+const NOTE_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 
 function slotKey(date: string, startHour: number) {
   return `${date}:${startHour}`;
@@ -68,6 +76,14 @@ function formatWeekRange(weekStart: string) {
   const startParts = weekStart.split("-").map(Number);
   const endParts = end.split("-").map(Number);
   return `${startParts[1]}月${startParts[2]}日 - ${endParts[1]}月${endParts[2]}日`;
+}
+
+function formatNoteUpdatedAt(value: string) {
+  const parts = NOTE_TIME_FORMATTER.formatToParts(new Date(value));
+  const readPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `更新于 ${readPart("month")}月${readPart("day")}日 ${readPart("hour")}:${readPart("minute")}`;
 }
 
 function applyUpdates(
@@ -702,8 +718,14 @@ export function EventWorkspace({ code }: { code: string }) {
                       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
                         {note.content}
                       </p>
-                      {note.isCurrent ? (
-                        <div className="mt-2 flex justify-end">
+                      <div className="mt-3 flex min-h-7 items-center justify-between gap-2">
+                        <time
+                          dateTime={note.updatedAt}
+                          className="shrink-0 text-[10px] font-medium tabular-nums text-slate-400"
+                        >
+                          {formatNoteUpdatedAt(note.updatedAt)}
+                        </time>
+                        {note.isCurrent ? (
                           <button
                             type="button"
                             className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-[var(--accent)]"
@@ -712,8 +734,8 @@ export function EventWorkspace({ code }: { code: string }) {
                             <PencilSimpleIcon size={13} weight="bold" />
                             修改
                           </button>
-                        </div>
-                      ) : null}
+                        ) : null}
+                      </div>
                     </article>
                   ),
                 )}
