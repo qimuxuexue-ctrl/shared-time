@@ -2,21 +2,15 @@
 
 import {
   ArrowRightIcon,
-  BellRingingIcon,
   CalendarBlankIcon,
-  CalendarCheckIcon,
-  CalendarXIcon,
   CaretDownIcon,
   ClockIcon,
-  ClockCounterClockwiseIcon,
   HashIcon,
-  NotePencilIcon,
   PlusIcon,
   QuestionMarkIcon,
   SignOutIcon,
   TicketIcon,
   TrashIcon,
-  UserPlusIcon,
   UsersThreeIcon,
   XIcon,
 } from "@phosphor-icons/react";
@@ -74,16 +68,6 @@ function formatNotificationTime(value: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
-}
-
-function NotificationTypeIcon({ type }: { type: HomeNotificationType }) {
-  const props = { size: 19, weight: "duotone" as const };
-
-  if (type === "participant") return <UserPlusIcon {...props} />;
-  if (type === "note") return <NotePencilIcon {...props} />;
-  if (type === "timeline") return <CalendarCheckIcon {...props} />;
-  if (type === "event_deleted") return <CalendarXIcon {...props} />;
-  return <ClockCounterClockwiseIcon {...props} />;
 }
 
 export function HomeApp() {
@@ -349,19 +333,7 @@ export function HomeApp() {
             aria-label="事件新动态"
             className="mb-7 overflow-hidden rounded-[20px] border border-blue-200/70 bg-white shadow-[0_16px_44px_rgba(76,111,173,0.1)]"
           >
-            <div className="flex items-center gap-3.5 px-4 pb-3 pt-4 sm:px-5">
-              <div className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-blue-50 text-blue-600">
-                <BellRingingIcon size={20} weight="duotone" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-semibold text-slate-900">事件动态</h2>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {notifications.length} 条未关闭的消息
-                </p>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-100 px-2 sm:px-3">
+            <div className="px-3 sm:px-4">
               {visibleNotifications.map((notification, index) => {
                 const isActiveEvent =
                   notification.type === "participant" ||
@@ -369,9 +341,6 @@ export function HomeApp() {
                   notification.type === "timeline";
                 const content = (
                   <>
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-50/80 text-blue-500">
-                      <NotificationTypeIcon type={notification.type} />
-                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-slate-800">
                         {notification.eventName}
@@ -404,12 +373,12 @@ export function HomeApp() {
                       <Link
                         href={`/e/${notification.eventShareCode}`}
                         prefetch
-                        className="group/notice flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-blue-50/60 active:scale-[0.99]"
+                        className="group/notice flex min-w-0 flex-1 items-center rounded-xl px-2 py-1.5 transition hover:bg-blue-50/60 active:scale-[0.99]"
                       >
                         {content}
                       </Link>
                     ) : (
-                      <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-1.5">
+                      <div className="flex min-w-0 flex-1 items-center px-2 py-1.5">
                         {content}
                       </div>
                     )}
