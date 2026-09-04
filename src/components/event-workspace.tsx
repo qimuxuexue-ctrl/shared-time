@@ -67,7 +67,7 @@ type CandidateSlot = {
   members: EventMember[];
 };
 
-type RecommendationFilter = "recommended" | "everyone" | "three";
+type RecommendationFilter = "recommended" | "everyone" | "two";
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -471,8 +471,8 @@ export function EventWorkspace({ code }: { code: string }) {
         ? rankedSlots.filter(
             (slot) => slot.members.length === data.members.length,
           )
-        : recommendationFilter === "three"
-          ? rankedSlots.filter((slot) => slot.members.length >= 3)
+        : recommendationFilter === "two"
+          ? rankedSlots.filter((slot) => slot.members.length >= 2)
           : rankedSlots;
     return filtered.slice(0, 6);
   }, [data, rankedSlots, recommendationFilter]);
@@ -1178,7 +1178,7 @@ export function EventWorkspace({ code }: { code: string }) {
               {([
                 ["recommended", "推荐排序"],
                 ["everyone", "全员有空"],
-                ["three", "至少 3 人"],
+                ["two", "至少 2 人"],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -1189,7 +1189,7 @@ export function EventWorkspace({ code }: { code: string }) {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                   onClick={() => setRecommendationFilter(value)}
-                  disabled={value === "three" && data.members.length < 3}
+                  disabled={value === "two" && data.members.length < 2}
                 >
                   {label}
                 </button>
@@ -1265,8 +1265,8 @@ export function EventWorkspace({ code }: { code: string }) {
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
               {recommendationFilter === "everyone"
                 ? "当前周还没有所有人都有空的时间"
-                : recommendationFilter === "three"
-                  ? "当前周还没有至少 3 人有空的时间"
+                : recommendationFilter === "two"
+                  ? "当前周还没有至少 2 人有空的共同时间"
                   : "当前周还没有可推荐的空闲时间"}
             </p>
           )}
