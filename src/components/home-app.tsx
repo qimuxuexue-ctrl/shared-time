@@ -60,8 +60,8 @@ const notificationLabels: Record<HomeNotificationType, string> = {
   participant: "有新参与者加入",
   note: "备注有更新",
   timeline: "有新的空闲时间",
-  final_time: "最终时间已确认或更新",
-  final_time_cancelled: "最终时间已取消",
+  final_time: "时间方案已确认或更新",
+  final_time_cancelled: "时间方案已取消",
   event_deleted: "已由创建者删除",
   event_expired: "已结束并自动清理",
 };

@@ -46,6 +46,7 @@ import {
 import { TAG_COLOR_OPTIONS } from "@/lib/tag-colors";
 import type {
   AvailabilitySlot,
+  EventFinalPeriod,
   EventMember,
   EventNote,
   EventFinalTime,
@@ -64,6 +65,7 @@ type SlotUpdate = {
 type CandidateSlot = {
   date: string;
   startHour: number;
+  endHour: number;
   members: EventMember[];
 };
 
@@ -113,8 +115,51 @@ function formatFinalDate(dateString: string) {
   return `${month}月${day}日 ${weekday}`;
 }
 
-function formatFinalTimeRange(startHour: number) {
-  return `${String(startHour).padStart(2, "0")}:00–${String(startHour + 1).padStart(2, "0")}:00`;
+function formatFinalTimeRange(startHour: number, endHour = startHour + 1) {
+  return `${String(startHour).padStart(2, "0")}:00–${String(endHour).padStart(2, "0")}:00`;
+}
+
+function normalizeFinalPeriods(periods: EventFinalPeriod[]) {
+  const sorted = periods
+    .map(({ date, startHour, endHour }) => ({ date, startHour, endHour }))
+    .sort(
+      (first, second) =>
+        first.date.localeCompare(second.date) ||
+        first.startHour - second.startHour ||
+        first.endHour - second.endHour,
+    );
+  const normalized: EventFinalPeriod[] = [];
+  for (const period of sorted) {
+    const previous = normalized.at(-1);
+    if (
+      previous &&
+      previous.date === period.date &&
+      period.startHour <= previous.endHour
+    ) {
+      previous.endHour = Math.max(previous.endHour, period.endHour);
+    } else {
+      normalized.push({ ...period });
+    }
+  }
+  return normalized;
+}
+
+function getPeriodMembers(
+  period: EventFinalPeriod,
+  members: EventMember[],
+  membersBySlot: Map<string, EventMember[]>,
+) {
+  const requiredHours = Array.from(
+    { length: period.endHour - period.startHour },
+    (_, index) => period.startHour + index,
+  );
+  return members.filter((member) =>
+    requiredHours.every((hour) =>
+      (membersBySlot.get(slotKey(period.date, hour)) ?? []).some(
+        (slotMember) => slotMember.id === member.id,
+      ),
+    ),
+  );
 }
 
 function drawRoundedRect(
@@ -128,29 +173,6 @@ function drawRoundedRect(
   context.beginPath();
   context.roundRect(x, y, width, height, radius);
   context.fill();
-}
-
-function drawWrappedText(
-  context: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  maxWidth: number,
-  lineHeight: number,
-) {
-  let line = "";
-  let currentY = y;
-  for (const character of text) {
-    const candidate = `${line}${character}`;
-    if (line && context.measureText(candidate).width > maxWidth) {
-      context.fillText(line, x, currentY);
-      line = character;
-      currentY += lineHeight;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) context.fillText(line, x, currentY);
 }
 
 function getWrappedTextLines(
@@ -188,27 +210,58 @@ async function loadCanvasImage(source: string) {
 
 async function createResultImage(
   data: EventWorkspaceData,
-  availableMembers: EventMember[],
+  periodSummaries: Array<{
+    period: EventFinalPeriod;
+    members: EventMember[];
+  }>,
 ) {
-  const finalTime = data.event.finalTime;
-  if (!finalTime) throw new Error("还没有确定最终时间");
+  if (periodSummaries.length === 0) throw new Error("还没有确定时间方案");
 
   const finalNote = data.event.finalNote?.trim() ?? "";
   const measurementCanvas = document.createElement("canvas");
   const measurementContext = measurementCanvas.getContext("2d");
   if (!measurementContext) throw new Error("无法生成分享图片");
+
+  measurementContext.font =
+    '700 64px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const titleLines = getWrappedTextLines(
+    measurementContext,
+    data.event.name,
+    820,
+  );
   measurementContext.font =
     '500 30px "Microsoft YaHei", "PingFang SC", sans-serif';
   const finalNoteLines = finalNote
     ? getWrappedTextLines(measurementContext, finalNote, 780)
     : [];
+  measurementContext.font =
+    '500 26px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const measuredPeriods = periodSummaries.map((summary) => {
+    const memberText =
+      summary.members.map((member) => member.tagName).join("、") ||
+      "暂无成员全程有空";
+    const memberLines = getWrappedTextLines(
+      measurementContext,
+      memberText,
+      730,
+    );
+    return {
+      ...summary,
+      memberLines,
+      rowHeight: 118 + memberLines.length * 34,
+    };
+  });
+
+  const scheduleY = 360 + titleLines.length * 78;
+  const scheduleCardHeight =
+    78 + measuredPeriods.reduce((total, period) => total + period.rowHeight, 0);
   const noteCardHeight = finalNoteLines.length
     ? 120 + finalNoteLines.length * 46
     : 0;
-  const noteCardY = 1162;
+  const noteCardY = scheduleY + scheduleCardHeight + 32;
   const footerY = finalNoteLines.length
     ? noteCardY + noteCardHeight + 72
-    : 1212;
+    : scheduleY + scheduleCardHeight + 72;
 
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
@@ -236,44 +289,51 @@ async function createResultImage(
   context.fillText(`# ${data.event.shareCode}`, 270, 210);
 
   context.fillStyle = "#0f172a";
-  context.font = '700 70px "Microsoft YaHei", "PingFang SC", sans-serif';
-  drawWrappedText(context, data.event.name, 116, 350, 820, 92);
-
-  context.fillStyle = "#64748b";
-  context.font = '600 40px "Microsoft YaHei", "PingFang SC", sans-serif';
-  context.fillText(formatFinalDate(finalTime.date), 116, 540);
-
-  context.fillStyle = "#3478f6";
-  context.font = '700 104px "Microsoft YaHei", "PingFang SC", sans-serif';
-  context.fillText(formatFinalTimeRange(finalTime.startHour), 108, 680);
-
-  context.fillStyle = "#475569";
-  context.font = '500 34px "Microsoft YaHei", "PingFang SC", sans-serif';
-  context.fillText(
-    getEventTimeZoneLabel(data.event.timeZone) ?? "",
-    116,
-    752,
-  );
+  context.font = '700 64px "Microsoft YaHei", "PingFang SC", sans-serif';
+  titleLines.forEach((line, index) => {
+    context.fillText(line, 116, 330 + index * 78);
+  });
 
   context.fillStyle = "#f8fafc";
-  drawRoundedRect(context, 108, 826, 864, 304, 32);
+  drawRoundedRect(context, 108, scheduleY, 864, scheduleCardHeight, 32);
   context.fillStyle = "#64748b";
-  context.font = '600 30px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.font = '600 28px "Microsoft YaHei", "PingFang SC", sans-serif';
   context.fillText(
-    `可参加 ${availableMembers.length}/${data.members.length} 人`,
+    `最终安排 · ${getEventTimeZoneLabel(data.event.timeZone) ?? ""}`,
     150,
-    892,
+    scheduleY + 52,
   );
-  context.fillStyle = "#1e293b";
-  context.font = '600 40px "Microsoft YaHei", "PingFang SC", sans-serif';
-  drawWrappedText(
-    context,
-    availableMembers.map((member) => member.tagName).join("、") || "暂无成员标记有空",
-    150,
-    966,
-    780,
-    58,
-  );
+
+  let periodY = scheduleY + 78;
+  measuredPeriods.forEach(({ period, members, memberLines, rowHeight }, index) => {
+    if (index > 0) {
+      context.fillStyle = "#e2e8f0";
+      context.fillRect(150, periodY, 780, 2);
+    }
+    context.fillStyle = "#475569";
+    context.font = '600 28px "Microsoft YaHei", "PingFang SC", sans-serif';
+    context.fillText(formatFinalDate(period.date), 150, periodY + 40);
+    context.textAlign = "right";
+    context.fillText(
+      `${members.length}/${data.members.length} 人全程有空`,
+      930,
+      periodY + 40,
+    );
+    context.textAlign = "left";
+    context.fillStyle = "#3478f6";
+    context.font = '700 48px "Microsoft YaHei", "PingFang SC", sans-serif';
+    context.fillText(
+      formatFinalTimeRange(period.startHour, period.endHour),
+      150,
+      periodY + 92,
+    );
+    context.fillStyle = "#475569";
+    context.font = '500 26px "Microsoft YaHei", "PingFang SC", sans-serif';
+    memberLines.forEach((line, lineIndex) => {
+      context.fillText(line, 150, periodY + 128 + lineIndex * 34);
+    });
+    periodY += rowHeight;
+  });
 
   if (finalNoteLines.length) {
     context.fillStyle = "#f8fafc";
@@ -290,7 +350,7 @@ async function createResultImage(
 
   context.fillStyle = "#94a3b8";
   context.font = '500 28px "Microsoft YaHei", "PingFang SC", sans-serif';
-  context.fillText("最终时间由事件创建者确认", 116, footerY);
+  context.fillText("时间方案由事件创建者确认", 116, footerY);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -367,10 +427,10 @@ export function EventWorkspace({ code }: { code: string }) {
   const [memberError, setMemberError] = useState("");
   const [recommendationFilter, setRecommendationFilter] =
     useState<RecommendationFilter>("recommended");
-  const [finalCandidate, setFinalCandidate] = useState<CandidateSlot | null>(
-    null,
-  );
+  const [recommendationDuration, setRecommendationDuration] = useState<1 | 2 | 3>(1);
+  const [finalPlanSeed, setFinalPlanSeed] = useState<EventFinalPeriod[] | null>(null);
   const [finalSaving, setFinalSaving] = useState(false);
+  const [finalPlanError, setFinalPlanError] = useState("");
   const [showCancelFinalConfirm, setShowCancelFinalConfirm] = useState(false);
   const [editingFinalNote, setEditingFinalNote] = useState(false);
   const [finalNoteSaving, setFinalNoteSaving] = useState(false);
@@ -526,11 +586,19 @@ export function EventWorkspace({ code }: { code: string }) {
 
     return dates
       .flatMap((date) =>
-        HOURS.map((startHour) => ({
-          date,
-          startHour,
-          members: membersBySlot.get(slotKey(date, startHour)) ?? [],
-        })),
+        HOURS.filter((startHour) => startHour + recommendationDuration <= 24).map(
+          (startHour) => {
+            const period = {
+              date,
+              startHour,
+              endHour: startHour + recommendationDuration,
+            };
+            return {
+              ...period,
+              members: getPeriodMembers(period, data.members, membersBySlot),
+            };
+          },
+        ),
       )
       .filter(
         (slot) =>
@@ -543,7 +611,7 @@ export function EventWorkspace({ code }: { code: string }) {
           first.date.localeCompare(second.date) ||
           first.startHour - second.startHour,
       );
-  }, [data, dates, membersBySlot]);
+  }, [data, dates, membersBySlot, recommendationDuration]);
 
   const visibleRecommendations = useMemo(() => {
     if (!data) return [] as CandidateSlot[];
@@ -593,6 +661,11 @@ export function EventWorkspace({ code }: { code: string }) {
     });
   };
 
+  const openFinalPlan = (periods: EventFinalPeriod[]) => {
+    setFinalPlanError("");
+    setFinalPlanSeed(normalizeFinalPeriods(periods));
+  };
+
   const ownNote = useMemo(
     () => data?.notes.find((note) => note.isCurrent) ?? null,
     [data?.notes],
@@ -603,17 +676,14 @@ export function EventWorkspace({ code }: { code: string }) {
     [data?.members],
   );
 
-  const finalTimeMembers = useMemo(() => {
-    if (!data?.event.finalTime) return [] as EventMember[];
-    return (
-      membersBySlot.get(
-        slotKey(
-          data.event.finalTime.date,
-          data.event.finalTime.startHour,
-        ),
-      ) ?? []
-    );
-  }, [data, membersBySlot]);
+  const finalPeriodSummaries = useMemo(
+    () =>
+      (data?.event.finalPeriods ?? []).map((period) => ({
+        period,
+        members: getPeriodMembers(period, data?.members ?? [], membersBySlot),
+      })),
+    [data?.event.finalPeriods, data?.members, membersBySlot],
+  );
 
   const flushPendingUpdates = useCallback(async () => {
     const currentData = dataRef.current;
@@ -909,10 +979,10 @@ export function EventWorkspace({ code }: { code: string }) {
     }
   };
 
-  const saveFinalTime = async () => {
-    if (!identity || !data || !finalCandidate) return;
+  const saveFinalTime = async (periods: EventFinalPeriod[]) => {
+    if (!identity || !data || periods.length === 0) return;
     setFinalSaving(true);
-    setError("");
+    setFinalPlanError("");
 
     try {
       const response = await fetch(`/api/events/${code}/final-time`, {
@@ -920,38 +990,44 @@ export function EventWorkspace({ code }: { code: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           identityId: identity.id,
-          date: finalCandidate.date,
-          startHour: finalCandidate.startHour,
+          periods: normalizeFinalPeriods(periods),
         }),
       });
       const payload = (await response.json()) as {
         finalTime?: EventFinalTime;
+        finalPeriods?: EventFinalPeriod[];
         error?: string;
       };
 
-      if (!response.ok || !payload.finalTime) {
-        throw new Error(payload.error ?? "确认最终时间失败");
+      if (!response.ok || !payload.finalTime || !payload.finalPeriods) {
+        throw new Error(payload.error ?? "保存时间方案失败");
       }
 
       setData((current) => {
         if (!current) return current;
         const next = {
           ...current,
-          event: { ...current.event, finalTime: payload.finalTime ?? null },
+          event: {
+            ...current.event,
+            finalTime: payload.finalTime ?? null,
+            finalPeriods: payload.finalPeriods ?? [],
+          },
         };
         dataRef.current = next;
         return next;
       });
-      setFinalCandidate(null);
+      setFinalPlanSeed(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "确认最终时间失败");
+      setFinalPlanError(
+        caught instanceof Error ? caught.message : "保存时间方案失败",
+      );
     } finally {
       setFinalSaving(false);
     }
   };
 
   const cancelFinalTime = async () => {
-    if (!identity || !data?.event.finalTime) return;
+    if (!identity || !data || data.event.finalPeriods.length === 0) return;
     setFinalSaving(true);
     setError("");
 
@@ -963,28 +1039,38 @@ export function EventWorkspace({ code }: { code: string }) {
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "取消最终时间失败");
+        throw new Error(payload.error ?? "取消时间方案失败");
       }
 
       setData((current) => {
         if (!current) return current;
         const next = {
           ...current,
-          event: { ...current.event, finalTime: null, finalNote: null },
+          event: {
+            ...current.event,
+            finalTime: null,
+            finalPeriods: [],
+            finalNote: null,
+          },
         };
         dataRef.current = next;
         return next;
       });
       setShowCancelFinalConfirm(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "取消最终时间失败");
+      setError(caught instanceof Error ? caught.message : "取消时间方案失败");
     } finally {
       setFinalSaving(false);
     }
   };
 
   const saveFinalNote = async (content: string) => {
-    if (!identity || !data?.event.finalTime || !data.event.isCreator) return;
+    if (
+      !identity ||
+      !data ||
+      data.event.finalPeriods.length === 0 ||
+      !data.event.isCreator
+    ) return;
     setFinalNoteSaving(true);
     setFinalNoteError("");
 
@@ -1026,14 +1112,14 @@ export function EventWorkspace({ code }: { code: string }) {
   };
 
   const shareResultImage = async () => {
-    if (!data?.event.finalTime) return;
+    if (!data || data.event.finalPeriods.length === 0) return;
     setSharingImage(true);
     setShareFeedback("");
 
     try {
-      const blob = await createResultImage(data, finalTimeMembers);
+      const blob = await createResultImage(data, finalPeriodSummaries);
       const safeEventName = data.event.name.replace(/[\\/:*?"<>|]/g, "-");
-      const file = new File([blob], `${safeEventName}-最终时间.png`, {
+      const file = new File([blob], `${safeEventName}-时间方案.png`, {
         type: "image/png",
       });
 
@@ -1043,8 +1129,13 @@ export function EventWorkspace({ code }: { code: string }) {
         navigator.canShare({ files: [file] })
       ) {
         await navigator.share({
-          title: `${data.event.name} · 最终时间`,
-          text: `${formatFinalDate(data.event.finalTime.date)} ${formatFinalTimeRange(data.event.finalTime.startHour)}${data.event.finalNote ? `\n${data.event.finalNote}` : ""}`,
+          title: `${data.event.name} · 时间方案`,
+          text: `${data.event.finalPeriods
+            .map(
+              (period) =>
+                `${formatFinalDate(period.date)} ${formatFinalTimeRange(period.startHour, period.endHour)}`,
+            )
+            .join("\n")}${data.event.finalNote ? `\n${data.event.finalNote}` : ""}`,
           files: [file],
         });
         setShareFeedback("已打开系统分享菜单");
@@ -1262,37 +1353,49 @@ export function EventWorkspace({ code }: { code: string }) {
 
         {error ? <p className="form-error mb-5">{error}</p> : null}
 
-        {data.event.finalTime ? (
+        {data.event.finalPeriods.length > 0 ? (
           <section className="mb-5 rounded-[20px] border border-blue-200/80 bg-[#eef5fc] p-5 shadow-[0_12px_36px_rgba(52,120,246,0.08)] sm:flex sm:items-center sm:justify-between sm:gap-6">
             <div className="min-w-0">
               <p className="flex items-center gap-2 text-sm font-semibold text-blue-600">
                 <CheckCircleIcon size={18} weight="fill" />
-                已确定最终时间
+                已确定时间方案
               </p>
-              <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <h2 className="text-2xl font-semibold tracking-[-0.025em] text-slate-950">
-                  {formatFinalDate(data.event.finalTime.date)}
-                </h2>
-                <p className="text-xl font-semibold tabular-nums text-[var(--accent)]">
-                  {formatFinalTimeRange(data.event.finalTime.startHour)}
-                </p>
+              <p className="mt-1 text-sm text-slate-600">
+                {getEventTimeZoneLabel(data.event.timeZone)} · 共 {data.event.finalPeriods.length} 个时间段
+              </p>
+              <div className="mt-3 grid gap-2">
+                {finalPeriodSummaries.map(({ period, members }) => (
+                  <div
+                    key={`${period.date}-${period.startHour}-${period.endHour}`}
+                    className="rounded-xl border border-blue-100/90 bg-white/80 px-3 py-2.5"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <p className="font-semibold text-slate-900">
+                        {formatFinalDate(period.date)}
+                        <span className="ml-2 tabular-nums text-[var(--accent)]">
+                          {formatFinalTimeRange(period.startHour, period.endHour)}
+                        </span>
+                      </p>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {members.length}/{data.members.length} 人全程有空
+                      </span>
+                    </div>
+                    {members.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {members.map((member) => (
+                          <span
+                            key={member.id}
+                            className="rounded-md bg-slate-50 px-2 py-1 text-[11px] font-semibold"
+                            style={{ color: member.tagColor }}
+                          >
+                            {member.tagName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
               </div>
-              <p className="mt-2 text-sm text-slate-600">
-                {getEventTimeZoneLabel(data.event.timeZone)} · 可参加 {finalTimeMembers.length}/{data.members.length} 人
-              </p>
-              {finalTimeMembers.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {finalTimeMembers.map((member) => (
-                    <span
-                      key={member.id}
-                      className="rounded-lg bg-white/75 px-2.5 py-1 text-xs font-semibold"
-                      style={{ color: member.tagColor }}
-                    >
-                      {member.tagName}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
               {data.event.finalNote ? (
                 <div className="mt-3 flex max-w-2xl items-start gap-2 rounded-xl border border-blue-100/90 bg-white/80 px-3 py-2.5 text-sm leading-6 text-slate-600">
                   <NotePencilIcon
@@ -1307,6 +1410,16 @@ export function EventWorkspace({ code }: { code: string }) {
               ) : null}
             </div>
             <div className="mt-5 flex shrink-0 flex-wrap gap-2 sm:mt-0 sm:justify-end">
+              {data.event.isCreator ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => openFinalPlan(data.event.finalPeriods)}
+                >
+                  <PencilSimpleIcon size={18} weight="bold" />
+                  修改时间
+                </button>
+              ) : null}
               {data.event.isCreator ? (
                 <button
                   type="button"
@@ -1335,7 +1448,7 @@ export function EventWorkspace({ code }: { code: string }) {
                   className="secondary-button text-red-600 hover:border-red-200 hover:bg-red-50"
                   onClick={() => setShowCancelFinalConfirm(true)}
                 >
-                  取消最终时间
+                  取消全部时间
                 </button>
               ) : null}
               {shareFeedback ? (
@@ -1354,10 +1467,27 @@ export function EventWorkspace({ code }: { code: string }) {
                 推荐共同时间
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                根据当前周的空闲记录自动排序，人数相同时优先显示较早时间。
+                按整段时间都有空的人数排序，人数相同时优先显示较早时间。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 p-1">
+                <span className="px-2 text-xs font-semibold text-slate-500">时长</span>
+                {([1, 2, 3] as const).map((duration) => (
+                  <button
+                    key={duration}
+                    type="button"
+                    className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition ${
+                      recommendationDuration === duration
+                        ? "bg-white text-slate-800 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                    onClick={() => setRecommendationDuration(duration)}
+                  >
+                    {duration} 小时
+                  </button>
+                ))}
+              </div>
               <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
                 {([
                   ["recommended", "推荐排序"],
@@ -1379,6 +1509,16 @@ export function EventWorkspace({ code }: { code: string }) {
                   </button>
                 ))}
               </div>
+              {data.event.isCreator ? (
+                <button
+                  type="button"
+                  className="secondary-button min-h-9 px-3 py-2 text-xs"
+                  onClick={() => openFinalPlan(data.event.finalPeriods)}
+                >
+                  <PlusIcon size={15} weight="bold" />
+                  自选时间段
+                </button>
+              ) : null}
               <div className="flex gap-1.5">
                 <button
                   type="button"
@@ -1410,9 +1550,12 @@ export function EventWorkspace({ code }: { code: string }) {
               {visibleRecommendations.map((slot, index) => {
                 const isBest =
                   recommendationFilter === "recommended" && index === 0;
-                const isFinal =
-                  data.event.finalTime?.date === slot.date &&
-                  data.event.finalTime.startHour === slot.startHour;
+                const isFinal = data.event.finalPeriods.some(
+                  (period) =>
+                    period.date === slot.date &&
+                    period.startHour === slot.startHour &&
+                    period.endHour === slot.endHour,
+                );
                 return (
                   <article
                     key={slotKey(slot.date, slot.startHour)}
@@ -1428,7 +1571,7 @@ export function EventWorkspace({ code }: { code: string }) {
                           {formatFinalDate(slot.date)}
                         </p>
                         <p className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
-                          {formatFinalTimeRange(slot.startHour)}
+                          {formatFinalTimeRange(slot.startHour, slot.endHour)}
                         </p>
                       </div>
                       <span className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-600 shadow-sm">
@@ -1453,15 +1596,28 @@ export function EventWorkspace({ code }: { code: string }) {
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3">
                       <span className="text-xs font-medium text-slate-400">
-                        {isFinal ? "当前最终时间" : isBest ? "当前最优" : "候选时间"}
+                        {isFinal ? "已加入安排" : isBest ? "当前最优" : "候选时间"}
                       </span>
                       {data.event.isCreator && !isFinal ? (
                         <button
                           type="button"
                           className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#2469df] active:scale-[0.98]"
-                          onClick={() => setFinalCandidate(slot)}
+                          onClick={() =>
+                            openFinalPlan(
+                              normalizeFinalPeriods([
+                                ...data.event.finalPeriods,
+                                {
+                                  date: slot.date,
+                                  startHour: slot.startHour,
+                                  endHour: slot.endHour,
+                                },
+                              ]),
+                            )
+                          }
                         >
-                          {data.event.finalTime ? "改为此时间" : "确定此时间"}
+                          {data.event.finalPeriods.length > 0
+                            ? "加入安排"
+                            : "使用此时间"}
                         </button>
                       ) : null}
                     </div>
@@ -1656,7 +1812,7 @@ export function EventWorkspace({ code }: { code: string }) {
                 <span>浅 → 深</span>
                 <span className="ml-1 flex items-center gap-1.5">
                   <span className="size-3 rounded-sm border border-amber-400 bg-amber-50" />
-                  最终时间
+                  已确定时间
                 </span>
               </div>
             </div>
@@ -1695,9 +1851,14 @@ export function EventWorkspace({ code }: { code: string }) {
                       const slotMembers = membersBySlot.get(slotKey(date, hour)) ?? [];
                       const ownSelected = slotMembers.some((member) => member.id === data.currentMemberId);
                       const disabled = !valid || past || data.event.status !== "active";
-                      const isFinal =
-                        data.event.finalTime?.date === date &&
-                        data.event.finalTime.startHour === hour;
+                      const finalPeriod = data.event.finalPeriods.find(
+                        (period) =>
+                          period.date === date &&
+                          hour >= period.startHour &&
+                          hour < period.endHour,
+                      );
+                      const isFinal = Boolean(finalPeriod);
+                      const isFinalStart = finalPeriod?.startHour === hour;
 
                       if (!valid) {
                         return <div key={date} className="min-h-[68px] border-l border-slate-100 bg-slate-50/45" />;
@@ -1728,7 +1889,7 @@ export function EventWorkspace({ code }: { code: string }) {
                                     data.members.length,
                                   ),
                           }}
-                          aria-label={`${date} ${hour}:00 至 ${hour + 1}:00，${slotMembers.length}/${data.members.length} 人有空${isFinal ? "，已确定为最终时间" : ""}`}
+                          aria-label={`${date} ${hour}:00 至 ${hour + 1}:00，${slotMembers.length}/${data.members.length} 人有空${isFinal ? "，已加入时间方案" : ""}`}
                         >
                           <div className="flex flex-wrap content-start gap-1.5">
                             {slotMembers.map((member) => (
@@ -1745,9 +1906,9 @@ export function EventWorkspace({ code }: { code: string }) {
                               </span>
                             ))}
                           </div>
-                          {isFinal ? (
+                          {isFinalStart ? (
                             <span className="absolute bottom-1.5 right-2 text-[10px] font-bold text-amber-700">
-                              最终时间
+                              已确定
                             </span>
                           ) : null}
                         </button>
@@ -1775,68 +1936,36 @@ export function EventWorkspace({ code }: { code: string }) {
         </div>
       </div>
 
-      {finalCandidate ? (
-        <Modal
-          title={data.event.finalTime ? "修改最终时间" : "确认最终时间"}
+      {finalPlanSeed ? (
+        <FinalPlanModal
+          initialPeriods={finalPlanSeed}
+          defaultDate={dates[0]}
+          minDate={dates[0]}
+          maxDate={dates[6]}
+          memberCount={data.members.length}
+          saving={finalSaving}
+          error={finalPlanError}
+          getMembers={(period) =>
+            getPeriodMembers(period, data.members, membersBySlot)
+          }
           onClose={() => {
-            if (!finalSaving) setFinalCandidate(null);
+            if (finalSaving) return;
+            setFinalPlanSeed(null);
+            setFinalPlanError("");
           }}
-        >
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-700">
-              {formatFinalDate(finalCandidate.date)}
-            </p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">
-              {formatFinalTimeRange(finalCandidate.startHour)}
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              {getEventTimeZoneLabel(data.event.timeZone)} · {finalCandidate.members.length}/{data.members.length} 人可参加
-            </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {finalCandidate.members.map((member) => (
-                <span
-                  key={member.id}
-                  className="rounded-lg bg-white px-2.5 py-1 text-xs font-semibold"
-                  style={{ color: member.tagColor }}
-                >
-                  {member.tagName}
-                </span>
-              ))}
-            </div>
-          </div>
-          <p className="mt-4 text-sm leading-6 text-slate-500">
-            确认后会通知事件中的所有参与者。之后仍可选择其他候选时间，或取消最终时间。
-          </p>
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              className="secondary-button justify-center"
-              onClick={() => setFinalCandidate(null)}
-              disabled={finalSaving}
-            >
-              返回
-            </button>
-            <button
-              type="button"
-              className="primary-button justify-center"
-              onClick={() => void saveFinalTime()}
-              disabled={finalSaving}
-            >
-              {finalSaving ? "正在确认" : "确认并通知"}
-            </button>
-          </div>
-        </Modal>
+          onSave={(periods) => void saveFinalTime(periods)}
+        />
       ) : null}
 
       {showCancelFinalConfirm ? (
         <Modal
-          title="取消最终时间？"
+          title="取消整个时间方案？"
           onClose={() => {
             if (!finalSaving) setShowCancelFinalConfirm(false);
           }}
         >
           <p className="text-sm leading-6 text-slate-600">
-            取消后，已填写的空闲时间不会被删除。所有参与者会收到最终时间已取消的通知。
+            取消后，已填写的空闲时间不会被删除。所有参与者会收到时间方案已取消的通知。
           </p>
           <div className="mt-6 grid grid-cols-2 gap-3">
             <button
@@ -1896,6 +2025,219 @@ export function EventWorkspace({ code }: { code: string }) {
         />
       ) : null}
     </main>
+  );
+}
+
+function FinalPlanModal({
+  initialPeriods,
+  defaultDate,
+  minDate,
+  maxDate,
+  memberCount,
+  saving,
+  error,
+  getMembers,
+  onClose,
+  onSave,
+}: {
+  initialPeriods: EventFinalPeriod[];
+  defaultDate: string;
+  minDate: string;
+  maxDate: string;
+  memberCount: number;
+  saving: boolean;
+  error: string;
+  getMembers: (period: EventFinalPeriod) => EventMember[];
+  onClose: () => void;
+  onSave: (periods: EventFinalPeriod[]) => void;
+}) {
+  const [periods, setPeriods] = useState(() =>
+    normalizeFinalPeriods(initialPeriods),
+  );
+  const [date, setDate] = useState(
+    defaultDate < minDate ? minDate : defaultDate,
+  );
+  const [startHour, setStartHour] = useState(19);
+  const [endHour, setEndHour] = useState(20);
+  const [localError, setLocalError] = useState("");
+
+  const addPeriod = () => {
+    if (!date) {
+      setLocalError("请选择日期");
+      return;
+    }
+    if (date < minDate || date > maxDate) {
+      setLocalError("请选择当前日历显示周内的日期");
+      return;
+    }
+    const next = normalizeFinalPeriods([
+      ...periods,
+      { date, startHour, endHour },
+    ]);
+    if (next.length > 20) {
+      setLocalError("一个方案最多添加 20 个时间段");
+      return;
+    }
+    setPeriods(next);
+    setLocalError("");
+  };
+
+  return (
+    <Modal
+      title={initialPeriods.length > 0 ? "编辑时间方案" : "自选时间段"}
+      onClose={onClose}
+      size="wide"
+    >
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+        <div className="grid gap-3 sm:grid-cols-[1.35fr_1fr_1fr_auto] sm:items-end">
+          <div>
+            <label htmlFor="final-period-date" className="field-label">
+              日期
+            </label>
+            <input
+              id="final-period-date"
+              type="date"
+              className="text-input"
+              value={date}
+              min={minDate}
+              max={maxDate}
+              onChange={(event) => setDate(event.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="final-period-start" className="field-label">
+              开始
+            </label>
+            <select
+              id="final-period-start"
+              className="text-input"
+              value={startHour}
+              onChange={(event) => {
+                const nextStart = Number(event.target.value);
+                setStartHour(nextStart);
+                if (endHour <= nextStart) setEndHour(nextStart + 1);
+              }}
+            >
+              {HOURS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {String(hour).padStart(2, "0")}:00
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="final-period-end" className="field-label">
+              结束
+            </label>
+            <select
+              id="final-period-end"
+              className="text-input"
+              value={endHour}
+              onChange={(event) => setEndHour(Number(event.target.value))}
+            >
+              {Array.from(
+                { length: 24 - startHour },
+                (_, index) => startHour + index + 1,
+              ).map((hour) => (
+                <option key={hour} value={hour}>
+                  {String(hour).padStart(2, "0")}:00
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="primary-button min-h-12 justify-center px-4"
+            onClick={addPeriod}
+          >
+            <PlusIcon size={17} weight="bold" />
+            添加
+          </button>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          可以添加连续或分散的多个时间段；同一天相邻或重叠的时间会自动合并。
+        </p>
+        {localError ? <p className="form-error">{localError}</p> : null}
+      </div>
+
+      <div className="mt-4 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+        {periods.length > 0 ? (
+          periods.map((period, index) => {
+            const members = getMembers(period);
+            return (
+              <div
+                key={`${period.date}-${period.startHour}-${period.endHour}`}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {formatFinalDate(period.date)}
+                    </p>
+                    <p className="mt-1 font-semibold tabular-nums text-[var(--accent)]">
+                      {formatFinalTimeRange(period.startHour, period.endHour)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {members.length}/{memberCount} 人全程有空
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-button size-9 shrink-0 text-slate-400 hover:text-red-600"
+                    onClick={() =>
+                      setPeriods((current) =>
+                        current.filter((_, periodIndex) => periodIndex !== index),
+                      )
+                    }
+                    aria-label={`移除 ${formatFinalDate(period.date)} ${formatFinalTimeRange(period.startHour, period.endHour)}`}
+                  >
+                    <TrashIcon size={16} weight="bold" />
+                  </button>
+                </div>
+                {members.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {members.map((member) => (
+                      <span
+                        key={member.id}
+                        className="rounded-md bg-slate-50 px-2 py-1 text-[11px] font-semibold"
+                        style={{ color: member.tagColor }}
+                      >
+                        {member.tagName}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <p className="rounded-xl border border-dashed border-slate-200 px-4 py-7 text-center text-sm text-slate-400">
+            还没有时间段，请先在上方添加。
+          </p>
+        )}
+      </div>
+
+      {error ? <p className="form-error">{error}</p> : null}
+
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          className="secondary-button justify-center"
+          onClick={onClose}
+          disabled={saving}
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          className="primary-button justify-center"
+          onClick={() => onSave(periods)}
+          disabled={saving || periods.length === 0}
+        >
+          {saving ? "正在保存" : "保存并通知"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

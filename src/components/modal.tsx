@@ -7,10 +7,12 @@ export function Modal({
   title,
   children,
   onClose,
+  size = "default",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  size?: "default" | "wide";
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -30,7 +32,9 @@ export function Modal({
       }}
     >
       <section
-        className="w-full max-w-md rounded-[22px] border border-slate-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(62,78,102,0.18)] sm:p-6"
+        className={`max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-[22px] border border-slate-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(62,78,102,0.18)] sm:p-6 ${
+          size === "wide" ? "max-w-2xl" : "max-w-md"
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

@@ -105,6 +105,7 @@ export async function GET(
     { data: members, error: membersError },
     { data: slots, error: slotsError },
     { data: notes, error: notesError },
+    { data: finalPeriods },
   ] =
     await Promise.all([
       supabaseAdmin
@@ -123,6 +124,12 @@ export async function GET(
         .select("id, member_id, content, updated_at")
         .eq("event_id", event.id)
         .order("created_at", { ascending: true }),
+      supabaseAdmin
+        .from("event_final_periods")
+        .select("id, slot_date, start_hour, end_hour")
+        .eq("event_id", event.id)
+        .order("slot_date", { ascending: true })
+        .order("start_hour", { ascending: true }),
     ]);
 
   if (membersError || slotsError || notesError) {
@@ -151,6 +158,23 @@ export async function GET(
               finalizedAt: event.finalized_at,
             }
           : null,
+      finalPeriods:
+        finalPeriods && finalPeriods.length > 0
+          ? finalPeriods.map((period) => ({
+              id: period.id,
+              date: period.slot_date,
+              startHour: period.start_hour,
+              endHour: period.end_hour,
+            }))
+          : event.final_date !== null && event.final_start_hour !== null
+            ? [
+                {
+                  date: event.final_date,
+                  startHour: event.final_start_hour,
+                  endHour: event.final_start_hour + 1,
+                },
+              ]
+            : [],
       finalNote:
         (event as { final_note?: string | null }).final_note?.trim() || null,
       status: event.status,

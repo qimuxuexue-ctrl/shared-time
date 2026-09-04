@@ -40,6 +40,13 @@ export type EventFinalTime = {
   finalizedAt: string;
 };
 
+export type EventFinalPeriod = {
+  id?: string;
+  date: string;
+  startHour: number;
+  endHour: number;
+};
+
 export type EventSummary = {
   id: string;
   shareCode: string;
@@ -94,6 +101,7 @@ export type EventWorkspaceData = {
     eventType: EventType;
     timeZone: EventTimeZone;
     finalTime: EventFinalTime | null;
+    finalPeriods: EventFinalPeriod[];
     finalNote: string | null;
     status: "active" | "closed" | "archived";
     createdAt: string;

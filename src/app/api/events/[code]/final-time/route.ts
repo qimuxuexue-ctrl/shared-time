@@ -18,9 +18,16 @@ const identitySchema = z.object({
   identityId: z.uuid("身份 ID 不正确"),
 });
 
-const finalTimeSchema = identitySchema.extend({
+const finalPeriodSchema = z.object({
   date: z.string().refine(isValidDateString, "日期不正确"),
   startHour: z.number().int().min(10).max(23),
+  endHour: z.number().int().min(11).max(24),
+}).refine((period) => period.endHour > period.startHour, {
+  message: "结束时间必须晚于开始时间",
+});
+
+const finalTimeSchema = identitySchema.extend({
+  periods: z.array(finalPeriodSchema).min(1).max(20),
 });
 
 const finalNoteSchema = identitySchema.extend({
@@ -80,7 +87,7 @@ export async function PATCH(
     );
   }
   if (!event.final_date) {
-    return Response.json({ error: "请先确定最终时间" }, { status: 409 });
+    return Response.json({ error: "请先确定时间方案" }, { status: 409 });
   }
   if (event.status !== "active") {
     return Response.json({ error: "这个事件已经关闭" }, { status: 409 });
@@ -137,7 +144,7 @@ export async function PUT(
   }
   if (event.creator_identity_id !== parsed.data.identityId) {
     return Response.json(
-      { error: "只有事件创建者可以确认最终时间" },
+      { error: "只有事件创建者可以确认时间方案" },
       { status: 403 },
     );
   }
@@ -150,36 +157,87 @@ export async function PUT(
   }
 
   const eventEnd = addDaysToDateString(event.start_date, 6);
-  if (
-    parsed.data.date < event.start_date ||
-    (event.event_type === "one_time" && parsed.data.date > eventEnd) ||
-    !isValidEventHour(parsed.data.date, parsed.data.startHour)
-  ) {
-    return Response.json({ error: "最终时间不在事件范围内" }, { status: 400 });
-  }
-  if (
-    isPastSlot(
-      parsed.data.date,
-      parsed.data.startHour,
-      event.time_zone,
-    )
-  ) {
-    return Response.json({ error: "不能确认已经过去的时间" }, { status: 409 });
+  const sortedPeriods = [...parsed.data.periods].sort(
+    (first, second) =>
+      first.date.localeCompare(second.date) ||
+      first.startHour - second.startHour ||
+      first.endHour - second.endHour,
+  );
+  const normalizedPeriods: typeof sortedPeriods = [];
+
+  for (const period of sortedPeriods) {
+    const validHours = Array.from(
+      { length: period.endHour - period.startHour },
+      (_, index) => period.startHour + index,
+    ).every((hour) => isValidEventHour(period.date, hour));
+    if (
+      period.date < event.start_date ||
+      (event.event_type === "one_time" && period.date > eventEnd) ||
+      !validHours
+    ) {
+      return Response.json(
+        { error: "最终时间段不在事件范围内" },
+        { status: 400 },
+      );
+    }
+    if (isPastSlot(period.date, period.startHour, event.time_zone)) {
+      return Response.json(
+        { error: "不能确认已经过去的时间" },
+        { status: 409 },
+      );
+    }
+
+    const previous = normalizedPeriods.at(-1);
+    if (
+      previous &&
+      previous.date === period.date &&
+      period.startHour <= previous.endHour
+    ) {
+      previous.endHour = Math.max(previous.endHour, period.endHour);
+    } else {
+      normalizedPeriods.push({ ...period });
+    }
   }
 
   const finalizedAt = new Date().toISOString();
+  const { error: deletePeriodsError } = await supabaseAdmin
+    .from("event_final_periods")
+    .delete()
+    .eq("event_id", event.id);
+
+  if (deletePeriodsError) {
+    return serverError("保存时间方案失败，请确认数据库更新已完成");
+  }
+
+  const { data: savedPeriods, error: insertPeriodsError } = await supabaseAdmin
+    .from("event_final_periods")
+    .insert(
+      normalizedPeriods.map((period) => ({
+        event_id: event.id,
+        slot_date: period.date,
+        start_hour: period.startHour,
+        end_hour: period.endHour,
+      })),
+    )
+    .select("id, slot_date, start_hour, end_hour");
+
+  if (insertPeriodsError || !savedPeriods) {
+    return serverError("保存时间方案失败，请稍后重试");
+  }
+
+  const firstPeriod = normalizedPeriods[0];
   const { error: updateError } = await supabaseAdmin
     .from("events")
     .update({
-      final_date: parsed.data.date,
-      final_start_hour: parsed.data.startHour,
+      final_date: firstPeriod.date,
+      final_start_hour: firstPeriod.startHour,
       finalized_at: finalizedAt,
     })
     .eq("id", event.id)
     .eq("creator_identity_id", parsed.data.identityId);
 
   if (updateError) {
-    return serverError("确认最终时间失败，请稍后重试");
+    return serverError("保存时间方案失败，请稍后重试");
   }
 
   try {
@@ -191,10 +249,22 @@ export async function PUT(
 
   return Response.json({
     finalTime: {
-      date: parsed.data.date,
-      startHour: parsed.data.startHour,
+      date: firstPeriod.date,
+      startHour: firstPeriod.startHour,
       finalizedAt,
     },
+    finalPeriods: savedPeriods
+      .map((period) => ({
+        id: period.id,
+        date: period.slot_date,
+        startHour: period.start_hour,
+        endHour: period.end_hour,
+      }))
+      .sort(
+        (first, second) =>
+          first.date.localeCompare(second.date) ||
+          first.startHour - second.startHour,
+      ),
   });
 }
 
@@ -224,7 +294,7 @@ export async function DELETE(
   }
   if (event.creator_identity_id !== parsed.data.identityId) {
     return Response.json(
-      { error: "只有事件创建者可以取消最终时间" },
+      { error: "只有事件创建者可以取消时间方案" },
       { status: 403 },
     );
   }
@@ -240,8 +310,13 @@ export async function DELETE(
     .eq("creator_identity_id", parsed.data.identityId);
 
   if (updateError) {
-    return serverError("取消最终时间失败，请稍后重试");
+    return serverError("取消时间方案失败，请稍后重试");
   }
+
+  await supabaseAdmin
+    .from("event_final_periods")
+    .delete()
+    .eq("event_id", event.id);
 
   await supabaseAdmin
     .from("events")
