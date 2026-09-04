@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 
-import { getBeijingDateString, getMondayDateString } from "@/lib/dates";
+import { getDateStringInTimeZone, getMondayDateString } from "@/lib/dates";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TAG_COLOR_VALUES } from "@/lib/tag-colors";
 import type {
@@ -18,6 +18,7 @@ type JoinedEvent = {
   start_date: string;
   weeks_ahead: number;
   event_type: "one_time" | "ongoing";
+  time_zone: "Asia/Shanghai" | "Asia/Tokyo";
   status: "active" | "closed" | "archived";
   creator_identity_id: string;
   created_at: string;
@@ -76,28 +77,36 @@ export function pickTagColor(identityId: string) {
 export function isExpiredOneTimeEvent(event: {
   event_type: "one_time" | "ongoing";
   start_date: string;
+  time_zone?: "Asia/Shanghai" | "Asia/Tokyo";
 }) {
   return (
     event.event_type === "one_time" &&
-    event.start_date < getMondayDateString(getBeijingDateString())
+    event.start_date <
+      getMondayDateString(
+        getDateStringInTimeZone(event.time_zone ?? "Asia/Shanghai"),
+      )
   );
 }
 
 export async function cleanupExpiredOneTimeEvents() {
-  const currentWeekStart = getMondayDateString(getBeijingDateString());
+  const latestWeekStart = getMondayDateString(
+    getDateStringInTimeZone("Asia/Tokyo"),
+  );
   const { data: expiredEvents, error: expiredEventsError } = await supabaseAdmin
     .from("events")
-    .select("id, share_code, name")
+    .select("id, share_code, name, start_date, event_type, time_zone")
     .eq("event_type", "one_time")
-    .lt("start_date", currentWeekStart);
+    .lt("start_date", latestWeekStart);
 
   if (expiredEventsError) {
     throw new Error("Unable to clean up expired events.");
   }
 
-  if (!expiredEvents?.length) return;
+  const eventsToDelete = (expiredEvents ?? []).filter(isExpiredOneTimeEvent);
 
-  await Promise.all(expiredEvents.map(deleteExpiredEvent));
+  if (!eventsToDelete.length) return;
+
+  await Promise.all(eventsToDelete.map(deleteExpiredEvent));
 }
 
 export async function notifyEventMembers(
@@ -205,7 +214,7 @@ async function getIdentityEvents(identityId: string) {
   const { data, error } = await supabaseAdmin
     .from("event_members")
     .select(
-      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at)",
+      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, time_zone, status, creator_identity_id, created_at)",
     )
     .eq("identity_id", identityId);
 
@@ -257,6 +266,7 @@ async function getIdentityEvents(identityId: string) {
         startDate: event.start_date,
         weeksAhead: event.weeks_ahead,
         eventType: event.event_type,
+        timeZone: event.time_zone,
         status: event.status,
         createdAt: event.created_at,
         memberId: membership.id,

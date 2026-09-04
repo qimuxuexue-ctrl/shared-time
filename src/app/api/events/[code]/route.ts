@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   addDaysToDateString,
-  getBeijingDateString,
+  getDateStringInTimeZone,
   getMondayDateString,
   isValidDateString,
 } from "@/lib/dates";
@@ -24,6 +24,11 @@ const querySchema = z.object({
 
 const deleteSchema = z.object({
   identityId: z.uuid("身份 ID 不正确"),
+});
+
+const updateTimeZoneSchema = z.object({
+  identityId: z.uuid("身份 ID 不正确"),
+  timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]),
 });
 
 export async function GET(
@@ -50,7 +55,7 @@ export async function GET(
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
     .select(
-      "id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at",
+      "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, status, creator_identity_id, created_at",
     )
     .eq("share_code", code)
     .maybeSingle();
@@ -86,7 +91,9 @@ export async function GET(
     );
   }
 
-  const currentWeekStart = getMondayDateString(getBeijingDateString());
+  const currentWeekStart = getMondayDateString(
+    getDateStringInTimeZone(event.time_zone),
+  );
   const requestedWeekStart = parsed.data.weekStart ?? currentWeekStart;
   const weekStart =
     requestedWeekStart < event.start_date
@@ -135,6 +142,7 @@ export async function GET(
       startDate: event.start_date,
       weeksAhead: event.weeks_ahead,
       eventType: event.event_type,
+      timeZone: event.time_zone,
       status: event.status,
       createdAt: event.created_at,
       isCreator: event.creator_identity_id === parsed.data.identityId,
@@ -170,6 +178,60 @@ export async function GET(
       startHour: slot.start_hour,
     })),
   });
+}
+
+export async function PATCH(
+  request: Request,
+  context: RouteContext<"/api/events/[code]">,
+) {
+  const { code: rawCode } = await context.params;
+  const code = rawCode.trim().toUpperCase();
+
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return Response.json({ error: "邀请码格式不正确" }, { status: 400 });
+  }
+
+  const payload = await request.json().catch(() => null);
+  const parsed = updateTimeZoneSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return validationError(parsed.error);
+  }
+
+  const { data: event, error: eventError } = await supabaseAdmin
+    .from("events")
+    .select("id, creator_identity_id")
+    .eq("share_code", code)
+    .maybeSingle<{ id: string; creator_identity_id: string }>();
+
+  if (eventError) {
+    return serverError();
+  }
+
+  if (!event) {
+    return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
+  }
+
+  if (event.creator_identity_id !== parsed.data.identityId) {
+    return Response.json(
+      { error: "只有事件创建者可以修改时区" },
+      { status: 403 },
+    );
+  }
+
+  const { data: updatedEvent, error: updateError } = await supabaseAdmin
+    .from("events")
+    .update({ time_zone: parsed.data.timeZone })
+    .eq("id", event.id)
+    .eq("creator_identity_id", parsed.data.identityId)
+    .select("time_zone")
+    .single<{ time_zone: "Asia/Shanghai" | "Asia/Tokyo" }>();
+
+  if (updateError || !updatedEvent) {
+    return serverError("修改时区失败，请稍后重试");
+  }
+
+  return Response.json({ timeZone: updatedEvent.time_zone });
 }
 
 export async function DELETE(

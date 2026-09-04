@@ -48,7 +48,7 @@ export async function PUT(
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, share_code, name, start_date, event_type, status")
+    .select("id, share_code, name, start_date, event_type, time_zone, status")
     .eq("share_code", code)
     .maybeSingle();
 
@@ -95,7 +95,7 @@ export async function PUT(
       return Response.json({ error: "包含无效的时间格" }, { status: 400 });
     }
 
-    if (isPastSlot(update.date, update.startHour)) {
+    if (isPastSlot(update.date, update.startHour, event.time_zone)) {
       return Response.json({ error: "过去的时间不能修改" }, { status: 409 });
     }
   }

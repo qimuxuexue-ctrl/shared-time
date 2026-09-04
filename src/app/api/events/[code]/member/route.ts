@@ -30,7 +30,7 @@ export async function PUT(
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, share_code, name, start_date, event_type, status")
+    .select("id, share_code, name, start_date, event_type, time_zone, status")
     .eq("share_code", code)
     .maybeSingle();
 

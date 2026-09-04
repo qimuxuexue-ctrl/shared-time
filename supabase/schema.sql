@@ -29,6 +29,7 @@ create table if not exists public.events (
   start_date date not null,
   weeks_ahead smallint not null default 4,
   event_type text not null default 'ongoing',
+  time_zone text not null default 'Asia/Shanghai',
   status text not null default 'active',
   last_member_activity_at timestamptz,
   last_note_activity_at timestamptz,
@@ -39,6 +40,7 @@ create table if not exists public.events (
   constraint events_name_length check (char_length(name) between 1 and 80),
   constraint events_weeks_ahead_range check (weeks_ahead between 1 and 12),
   constraint events_event_type_values check (event_type in ('one_time', 'ongoing')),
+  constraint events_time_zone_values check (time_zone in ('Asia/Shanghai', 'Asia/Tokyo')),
   constraint events_status_values check (status in ('active', 'closed', 'archived'))
 );
 
@@ -46,11 +48,21 @@ alter table public.events
   add column if not exists event_type text not null default 'ongoing';
 
 alter table public.events
+  add column if not exists time_zone text not null default 'Asia/Shanghai';
+
+alter table public.events
   drop constraint if exists events_event_type_values;
 
 alter table public.events
   add constraint events_event_type_values
   check (event_type in ('one_time', 'ongoing'));
+
+alter table public.events
+  drop constraint if exists events_time_zone_values;
+
+alter table public.events
+  add constraint events_time_zone_values
+  check (time_zone in ('Asia/Shanghai', 'Asia/Tokyo'));
 
 alter table public.events
   add column if not exists last_member_activity_at timestamptz,

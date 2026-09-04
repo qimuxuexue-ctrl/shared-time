@@ -170,8 +170,8 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
           <section className="mt-6 grid gap-4 rounded-[22px] bg-slate-50 p-5 sm:grid-cols-3 sm:p-6">
             <GuideTip
               icon={<ClockIcon size={18} weight="duotone" />}
-              title="统一时区"
-              body="所有时间都按北京时间 UTC+8 显示。"
+              title="事件时区"
+              body="创建时可选择北京时间或东京时间，创建者之后仍可修改。"
             />
             <GuideTip
               icon={<ShareNetworkIcon size={18} weight="duotone" />}

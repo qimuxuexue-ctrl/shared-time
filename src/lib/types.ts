@@ -5,6 +5,8 @@ export type Identity = {
 
 export type EventType = "one_time" | "ongoing";
 
+export type EventTimeZone = "Asia/Shanghai" | "Asia/Tokyo";
+
 export type EventUpdateType = "participant" | "note" | "timeline";
 
 export type HomeNotificationType =
@@ -34,6 +36,7 @@ export type EventSummary = {
   startDate: string;
   weeksAhead: number;
   eventType: EventType;
+  timeZone: EventTimeZone;
   status: "active" | "closed" | "archived";
   createdAt: string;
   memberId: string;
@@ -77,6 +80,7 @@ export type EventWorkspaceData = {
     startDate: string;
     weeksAhead: number;
     eventType: EventType;
+    timeZone: EventTimeZone;
     status: "active" | "closed" | "archived";
     createdAt: string;
     isCreator: boolean;

@@ -33,7 +33,10 @@ import { Modal } from "@/components/modal";
 import { readStoredIdentity, storeIdentity } from "@/lib/browser-identity";
 import {
   addDaysToDateString,
+  EVENT_TIME_ZONE_OPTIONS,
   getBeijingDateString,
+  getDateStringInTimeZone,
+  getEventTimeZoneLabel,
   getMondayDateString,
   isPastSlot,
   isValidEventHour,
@@ -44,6 +47,7 @@ import type {
   EventMember,
   EventNote,
   EventSummary,
+  EventTimeZone,
   EventWorkspaceData,
   Identity,
 } from "@/lib/types";
@@ -56,15 +60,6 @@ type SlotUpdate = {
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-const NOTE_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
 function slotKey(date: string, startHour: number) {
   return `${date}:${startHour}`;
 }
@@ -81,8 +76,15 @@ function formatWeekRange(weekStart: string) {
   return `${startParts[1]}月${startParts[2]}日 - ${endParts[1]}月${endParts[2]}日`;
 }
 
-function formatNoteUpdatedAt(value: string) {
-  const parts = NOTE_TIME_FORMATTER.formatToParts(new Date(value));
+function formatNoteUpdatedAt(value: string, timeZone: EventTimeZone) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone,
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
   const readPart = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
 
@@ -125,6 +127,7 @@ export function EventWorkspace({ code }: { code: string }) {
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [timeZoneSaving, setTimeZoneSaving] = useState(false);
   const [error, setError] = useState("");
   const [missingIdentity, setMissingIdentity] = useState(false);
   const [joinRequired, setJoinRequired] = useState(false);
@@ -412,7 +415,12 @@ export function EventWorkspace({ code }: { code: string }) {
     const updates: SlotUpdate[] = [];
 
     for (let hour = start; hour < end; hour += 1) {
-      if (!isValidEventHour(date, hour) || isPastSlot(date, hour)) continue;
+      if (
+        !isValidEventHour(date, hour) ||
+        isPastSlot(date, hour, data.event.timeZone)
+      ) {
+        continue;
+      }
       const selected = (membersBySlot.get(slotKey(date, hour)) ?? []).some(
         (member) => member.id === data.currentMemberId,
       );
@@ -430,7 +438,7 @@ export function EventWorkspace({ code }: { code: string }) {
         (slot) =>
           slot.memberId === data.currentMemberId &&
           slot.date === date &&
-          !isPastSlot(slot.date, slot.startHour),
+          !isPastSlot(slot.date, slot.startHour, data.event.timeZone),
       )
       .map((slot) => ({
         date: slot.date,
@@ -541,6 +549,38 @@ export function EventWorkspace({ code }: { code: string }) {
       setMemberError(caught instanceof Error ? caught.message : "保存 Tag 失败");
     } finally {
       setMemberSaving(false);
+    }
+  };
+
+  const saveTimeZone = async (timeZone: EventTimeZone) => {
+    if (!identity || !data || timeZone === data.event.timeZone) return;
+    setTimeZoneSaving(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id, timeZone }),
+      });
+      const payload = (await response.json()) as {
+        timeZone?: EventTimeZone;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.timeZone) {
+        throw new Error(payload.error ?? "修改时区失败");
+      }
+
+      const currentWeekStart = getMondayDateString(
+        getDateStringInTimeZone(payload.timeZone),
+      );
+      setWeekStart(currentWeekStart);
+      await loadWorkspace(identity, currentWeekStart);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "修改时区失败");
+    } finally {
+      setTimeZoneSaving(false);
     }
   };
 
@@ -679,8 +719,30 @@ export function EventWorkspace({ code }: { code: string }) {
           <div>
             <p className="flex items-center gap-2 text-sm font-medium text-slate-500">
               <ClockIcon size={16} weight="bold" />
-              北京时间 UTC+8
+              {data.event.isCreator ? (
+                <select
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-medium text-slate-600 outline-none transition hover:border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-60"
+                  value={data.event.timeZone}
+                  onChange={(event) =>
+                    void saveTimeZone(event.target.value as EventTimeZone)
+                  }
+                  disabled={timeZoneSaving || saving}
+                  aria-label="事件时区"
+                  title="创建者可以修改事件时区"
+                >
+                  {EVENT_TIME_ZONE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span>{getEventTimeZoneLabel(data.event.timeZone)}</span>
+              )}
               {saving ? <span className="text-[var(--accent)]">正在保存</span> : null}
+              {timeZoneSaving ? (
+                <span className="text-[var(--accent)]">正在切换时区</span>
+              ) : null}
               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                 {data.event.eventType === "one_time" ? "一次性事件" : "常驻事件"}
               </span>
@@ -807,7 +869,10 @@ export function EventWorkspace({ code }: { code: string }) {
                           dateTime={note.updatedAt}
                           className="shrink-0 text-[10px] font-medium tabular-nums text-slate-400"
                         >
-                          {formatNoteUpdatedAt(note.updatedAt)}
+                          {formatNoteUpdatedAt(
+                            note.updatedAt,
+                            data.event.timeZone,
+                          )}
                         </time>
                         {note.isCurrent ? (
                           <button
@@ -899,7 +964,9 @@ export function EventWorkspace({ code }: { code: string }) {
                     </div>
                     {dates.map((date) => {
                       const valid = isValidEventHour(date, hour);
-                      const past = valid && isPastSlot(date, hour);
+                      const past =
+                        valid &&
+                        isPastSlot(date, hour, data.event.timeZone);
                       const slotMembers = membersBySlot.get(slotKey(date, hour)) ?? [];
                       const ownSelected = slotMembers.some((member) => member.id === data.currentMemberId);
                       const disabled = !valid || past || data.event.status !== "active";

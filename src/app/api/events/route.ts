@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { getBeijingDateString, getMondayDateString } from "@/lib/dates";
+import { getDateStringInTimeZone, getMondayDateString } from "@/lib/dates";
 import {
   createShareCode,
   getIdentityHomeData,
@@ -16,6 +16,7 @@ const createEventSchema = z.object({
   name: z.string().trim().min(1, "请输入事件名称").max(80),
   tagName: z.string().trim().min(1).max(24).optional(),
   eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
+  timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]).default("Asia/Shanghai"),
 });
 
 export async function GET(request: Request) {
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     return validationError(parsed.error);
   }
 
-  const { identityId, name, eventType } = parsed.data;
+  const { identityId, name, eventType, timeZone } = parsed.data;
   const { data: identity, error: identityError } = await supabaseAdmin
     .from("identities")
     .select("id, display_id")
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "找不到这个身份" }, { status: 404 });
   }
 
-  const startDate = getMondayDateString(getBeijingDateString());
+  const startDate = getMondayDateString(getDateStringInTimeZone(timeZone));
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const shareCode = createShareCode();
@@ -70,9 +71,10 @@ export async function POST(request: Request) {
         start_date: startDate,
         weeks_ahead: 1,
         event_type: eventType,
+        time_zone: timeZone,
       })
       .select(
-        "id, share_code, name, start_date, weeks_ahead, event_type, status, creator_identity_id, created_at",
+        "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, status, creator_identity_id, created_at",
       )
       .single();
 
@@ -109,6 +111,7 @@ export async function POST(request: Request) {
           startDate: event.start_date,
           weeksAhead: event.weeks_ahead,
           eventType: event.event_type,
+          timeZone: event.time_zone,
           status: event.status,
           createdAt: event.created_at,
           memberId: member.id,

@@ -28,8 +28,13 @@ import {
   readStoredIdentity,
   storeIdentity,
 } from "@/lib/browser-identity";
+import {
+  EVENT_TIME_ZONE_OPTIONS,
+  getEventTimeZoneLabel,
+} from "@/lib/dates";
 import type {
   EventSummary,
+  EventTimeZone,
   EventType,
   HomeNotification,
   HomeNotificationType,
@@ -426,7 +431,7 @@ export function HomeApp() {
           <div>
             <p className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500">
               <ClockIcon size={16} weight="bold" />
-              北京时间 UTC+8
+              每个事件按所选时区显示
             </p>
             <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">
               你的事件
@@ -512,7 +517,11 @@ export function HomeApp() {
                         <UsersThreeIcon size={15} weight="bold" />
                         {event.participantCount} 人参加
                       </span>
-                      <span>{event.eventType === "one_time" ? "一次性" : "常驻"}</span>
+                      <span>
+                        {event.eventType === "one_time" ? "一次性" : "常驻"}
+                        {" · "}
+                        {getEventTimeZoneLabel(event.timeZone, true)}
+                      </span>
                     </div>
                   </div>
                   <ArrowRightIcon
@@ -606,6 +615,8 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
   const [name, setName] = useState("");
   const [tagName, setTagName] = useState("");
   const [eventType, setEventType] = useState<EventType>("one_time");
+  const [timeZone, setTimeZone] =
+    useState<EventTimeZone>("Asia/Shanghai");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -617,7 +628,13 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
       const response = await fetch("/api/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identityId: identity.id, name, tagName, eventType }),
+        body: JSON.stringify({
+          identityId: identity.id,
+          name,
+          tagName,
+          eventType,
+          timeZone,
+        }),
       });
       const payload = await readJson<{ event: EventSummary }>(response);
       onCreated(payload.event);
@@ -650,6 +667,26 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           </select>
           <p className="mt-2 text-xs leading-5 text-slate-500">
             一次性事件在本周结束后自动清理；常驻事件可以一直向后预约。
+          </p>
+        </div>
+        <div>
+          <label htmlFor="event-time-zone" className="field-label">事件时区</label>
+          <select
+            id="event-time-zone"
+            className="text-input"
+            value={timeZone}
+            onChange={(event) =>
+              setTimeZone(event.target.value as EventTimeZone)
+            }
+          >
+            {EVENT_TIME_ZONE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            日期、时间格和本周范围都会按此时区显示；创建后仍可修改。
           </p>
         </div>
         {error ? <p className="form-error">{error}</p> : null}
