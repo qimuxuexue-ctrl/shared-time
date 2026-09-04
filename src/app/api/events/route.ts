@@ -74,7 +74,7 @@ export async function POST(request: Request) {
         time_zone: timeZone,
       })
       .select(
-        "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, status, creator_identity_id, created_at",
+        "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at",
       )
       .single();
 
@@ -112,6 +112,7 @@ export async function POST(request: Request) {
           weeksAhead: event.weeks_ahead,
           eventType: event.event_type,
           timeZone: event.time_zone,
+          finalTime: null,
           status: event.status,
           createdAt: event.created_at,
           memberId: member.id,

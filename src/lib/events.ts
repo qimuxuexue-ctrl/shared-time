@@ -19,6 +19,9 @@ type JoinedEvent = {
   weeks_ahead: number;
   event_type: "one_time" | "ongoing";
   time_zone: "Asia/Shanghai" | "Asia/Tokyo";
+  final_date: string | null;
+  final_start_hour: number | null;
+  finalized_at: string | null;
   status: "active" | "closed" | "archived";
   creator_identity_id: string;
   created_at: string;
@@ -57,6 +60,8 @@ const ACTIVE_UPDATE_TYPES = new Set<HomeNotificationType>([
   "participant",
   "note",
   "timeline",
+  "final_time",
+  "final_time_cancelled",
 ]);
 
 export function createShareCode() {
@@ -214,7 +219,7 @@ async function getIdentityEvents(identityId: string) {
   const { data, error } = await supabaseAdmin
     .from("event_members")
     .select(
-      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, time_zone, status, creator_identity_id, created_at)",
+      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at)",
     )
     .eq("identity_id", identityId);
 
@@ -267,6 +272,16 @@ async function getIdentityEvents(identityId: string) {
         weeksAhead: event.weeks_ahead,
         eventType: event.event_type,
         timeZone: event.time_zone,
+        finalTime:
+          event.final_date !== null &&
+          event.final_start_hour !== null &&
+          event.finalized_at !== null
+            ? {
+                date: event.final_date,
+                startHour: event.final_start_hour,
+                finalizedAt: event.finalized_at,
+              }
+            : null,
         status: event.status,
         createdAt: event.created_at,
         memberId: membership.id,

@@ -7,7 +7,12 @@ export type EventType = "one_time" | "ongoing";
 
 export type EventTimeZone = "Asia/Shanghai" | "Asia/Tokyo";
 
-export type EventUpdateType = "participant" | "note" | "timeline";
+export type EventUpdateType =
+  | "participant"
+  | "note"
+  | "timeline"
+  | "final_time"
+  | "final_time_cancelled";
 
 export type HomeNotificationType =
   | EventUpdateType
@@ -29,6 +34,12 @@ export type EventParticipantSummary = {
   tagColor: string;
 };
 
+export type EventFinalTime = {
+  date: string;
+  startHour: number;
+  finalizedAt: string;
+};
+
 export type EventSummary = {
   id: string;
   shareCode: string;
@@ -37,6 +48,7 @@ export type EventSummary = {
   weeksAhead: number;
   eventType: EventType;
   timeZone: EventTimeZone;
+  finalTime: EventFinalTime | null;
   status: "active" | "closed" | "archived";
   createdAt: string;
   memberId: string;
@@ -81,6 +93,7 @@ export type EventWorkspaceData = {
     weeksAhead: number;
     eventType: EventType;
     timeZone: EventTimeZone;
+    finalTime: EventFinalTime | null;
     status: "active" | "closed" | "archived";
     createdAt: string;
     isCreator: boolean;

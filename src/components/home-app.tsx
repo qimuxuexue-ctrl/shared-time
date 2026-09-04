@@ -60,6 +60,8 @@ const notificationLabels: Record<HomeNotificationType, string> = {
   participant: "有新参与者加入",
   note: "备注有更新",
   timeline: "有新的空闲时间",
+  final_time: "最终时间已确认或更新",
+  final_time_cancelled: "最终时间已取消",
   event_deleted: "已由创建者删除",
   event_expired: "已结束并自动清理",
 };
@@ -73,6 +75,12 @@ function formatNotificationTime(value: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function formatFinalTimeSummary(finalTime: EventSummary["finalTime"]) {
+  if (!finalTime) return "";
+  const [, month, day] = finalTime.date.split("-").map(Number);
+  return `${month}/${day} ${String(finalTime.startHour).padStart(2, "0")}:00 已确定`;
 }
 
 export function HomeApp() {
@@ -340,7 +348,9 @@ export function HomeApp() {
                 const isActiveEvent =
                   notification.type === "participant" ||
                   notification.type === "note" ||
-                  notification.type === "timeline";
+                  notification.type === "timeline" ||
+                  notification.type === "final_time" ||
+                  notification.type === "final_time_cancelled";
                 const content = (
                   <>
                     <span className="min-w-0 flex-1">
@@ -522,6 +532,11 @@ export function HomeApp() {
                         {" · "}
                         {getEventTimeZoneLabel(event.timeZone, true)}
                       </span>
+                      {event.finalTime ? (
+                        <span className="font-semibold text-blue-600">
+                          {formatFinalTimeSummary(event.finalTime)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <ArrowRightIcon

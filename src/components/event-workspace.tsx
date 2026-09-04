@@ -7,12 +7,14 @@ import {
   CaretLeftIcon,
   CaretRightIcon,
   CheckIcon,
+  CheckCircleIcon,
   ClockIcon,
   CopyIcon,
   HashIcon,
   NotePencilIcon,
   PencilSimpleIcon,
   PlusIcon,
+  ShareNetworkIcon,
   TrashIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react";
@@ -46,6 +48,7 @@ import type {
   AvailabilitySlot,
   EventMember,
   EventNote,
+  EventFinalTime,
   EventSummary,
   EventTimeZone,
   EventWorkspaceData,
@@ -57,6 +60,14 @@ type SlotUpdate = {
   startHour: number;
   available: boolean;
 };
+
+type CandidateSlot = {
+  date: string;
+  startHour: number;
+  members: EventMember[];
+};
+
+type RecommendationFilter = "recommended" | "everyone" | "three";
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -74,6 +85,146 @@ function formatWeekRange(weekStart: string) {
   const startParts = weekStart.split("-").map(Number);
   const endParts = end.split("-").map(Number);
   return `${startParts[1]}月${startParts[2]}日 - ${endParts[1]}月${endParts[2]}日`;
+}
+
+function formatFinalDate(dateString: string) {
+  const [, month, day] = dateString.split("-").map(Number);
+  const dayIndex = new Date(`${dateString}T00:00:00Z`).getUTCDay();
+  const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+    dayIndex
+  ];
+  return `${month}月${day}日 ${weekday}`;
+}
+
+function formatFinalTimeRange(startHour: number) {
+  return `${String(startHour).padStart(2, "0")}:00–${String(startHour + 1).padStart(2, "0")}:00`;
+}
+
+function drawRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  context.beginPath();
+  context.roundRect(x, y, width, height, radius);
+  context.fill();
+}
+
+function drawWrappedText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+) {
+  let line = "";
+  let currentY = y;
+  for (const character of text) {
+    const candidate = `${line}${character}`;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      context.fillText(line, x, currentY);
+      line = character;
+      currentY += lineHeight;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) context.fillText(line, x, currentY);
+}
+
+async function loadCanvasImage(source: string) {
+  const image = new Image();
+  image.src = source;
+  await image.decode();
+  return image;
+}
+
+async function createResultImage(
+  data: EventWorkspaceData,
+  availableMembers: EventMember[],
+) {
+  const finalTime = data.event.finalTime;
+  if (!finalTime) throw new Error("还没有确定最终时间");
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("无法生成分享图片");
+
+  context.fillStyle = "#f3f5f8";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#ffffff";
+  drawRoundedRect(context, 70, 64, 940, 1222, 48);
+
+  try {
+    const character = await loadCanvasImage("/brand-character.png");
+    context.drawImage(character, 116, 112, 118, 118);
+  } catch {
+    context.fillStyle = "#3478f6";
+    drawRoundedRect(context, 116, 112, 112, 112, 30);
+  }
+
+  context.fillStyle = "#64748b";
+  context.font = '600 30px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText("SHARE TIMELINE", 270, 165);
+  context.font = '500 28px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText(`# ${data.event.shareCode}`, 270, 210);
+
+  context.fillStyle = "#0f172a";
+  context.font = '700 70px "Microsoft YaHei", "PingFang SC", sans-serif';
+  drawWrappedText(context, data.event.name, 116, 350, 820, 92);
+
+  context.fillStyle = "#64748b";
+  context.font = '600 40px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText(formatFinalDate(finalTime.date), 116, 540);
+
+  context.fillStyle = "#3478f6";
+  context.font = '700 104px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText(formatFinalTimeRange(finalTime.startHour), 108, 680);
+
+  context.fillStyle = "#475569";
+  context.font = '500 34px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText(
+    getEventTimeZoneLabel(data.event.timeZone) ?? "",
+    116,
+    752,
+  );
+
+  context.fillStyle = "#f8fafc";
+  drawRoundedRect(context, 108, 826, 864, 304, 32);
+  context.fillStyle = "#64748b";
+  context.font = '600 30px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText(
+    `可参加 ${availableMembers.length}/${data.members.length} 人`,
+    150,
+    892,
+  );
+  context.fillStyle = "#1e293b";
+  context.font = '600 40px "Microsoft YaHei", "PingFang SC", sans-serif';
+  drawWrappedText(
+    context,
+    availableMembers.map((member) => member.tagName).join("、") || "暂无成员标记有空",
+    150,
+    966,
+    780,
+    58,
+  );
+
+  context.fillStyle = "#94a3b8";
+  context.font = '500 28px "Microsoft YaHei", "PingFang SC", sans-serif';
+  context.fillText("最终时间由事件创建者确认", 116, 1212);
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("无法生成分享图片"))),
+      "image/png",
+    );
+  });
 }
 
 function formatNoteUpdatedAt(value: string, timeZone: EventTimeZone) {
@@ -141,6 +292,15 @@ export function EventWorkspace({ code }: { code: string }) {
   const [editingMember, setEditingMember] = useState(false);
   const [memberSaving, setMemberSaving] = useState(false);
   const [memberError, setMemberError] = useState("");
+  const [recommendationFilter, setRecommendationFilter] =
+    useState<RecommendationFilter>("recommended");
+  const [finalCandidate, setFinalCandidate] = useState<CandidateSlot | null>(
+    null,
+  );
+  const [finalSaving, setFinalSaving] = useState(false);
+  const [showCancelFinalConfirm, setShowCancelFinalConfirm] = useState(false);
+  const [sharingImage, setSharingImage] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState("");
   const dataRef = useRef<EventWorkspaceData | null>(null);
   const savedAvailabilityRef = useRef<AvailabilitySlot[]>([]);
   const pendingUpdatesRef = useRef(new Map<string, SlotUpdate>());
@@ -280,6 +440,43 @@ export function EventWorkspace({ code }: { code: string }) {
     return map;
   }, [data?.availability, membersById]);
 
+  const rankedSlots = useMemo(() => {
+    if (!data) return [] as CandidateSlot[];
+
+    return dates
+      .flatMap((date) =>
+        HOURS.map((startHour) => ({
+          date,
+          startHour,
+          members: membersBySlot.get(slotKey(date, startHour)) ?? [],
+        })),
+      )
+      .filter(
+        (slot) =>
+          slot.members.length > 0 &&
+          !isPastSlot(slot.date, slot.startHour, data.event.timeZone),
+      )
+      .sort(
+        (first, second) =>
+          second.members.length - first.members.length ||
+          first.date.localeCompare(second.date) ||
+          first.startHour - second.startHour,
+      );
+  }, [data, dates, membersBySlot]);
+
+  const visibleRecommendations = useMemo(() => {
+    if (!data) return [] as CandidateSlot[];
+    const filtered =
+      recommendationFilter === "everyone"
+        ? rankedSlots.filter(
+            (slot) => slot.members.length === data.members.length,
+          )
+        : recommendationFilter === "three"
+          ? rankedSlots.filter((slot) => slot.members.length >= 3)
+          : rankedSlots;
+    return filtered.slice(0, 6);
+  }, [data, rankedSlots, recommendationFilter]);
+
   const ownNote = useMemo(
     () => data?.notes.find((note) => note.isCurrent) ?? null,
     [data?.notes],
@@ -289,6 +486,18 @@ export function EventWorkspace({ code }: { code: string }) {
     () => data?.members.find((member) => member.isCurrent) ?? null,
     [data?.members],
   );
+
+  const finalTimeMembers = useMemo(() => {
+    if (!data?.event.finalTime) return [] as EventMember[];
+    return (
+      membersBySlot.get(
+        slotKey(
+          data.event.finalTime.date,
+          data.event.finalTime.startHour,
+        ),
+      ) ?? []
+    );
+  }, [data, membersBySlot]);
 
   const flushPendingUpdates = useCallback(async () => {
     const currentData = dataRef.current;
@@ -584,6 +793,126 @@ export function EventWorkspace({ code }: { code: string }) {
     }
   };
 
+  const saveFinalTime = async () => {
+    if (!identity || !data || !finalCandidate) return;
+    setFinalSaving(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}/final-time`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identityId: identity.id,
+          date: finalCandidate.date,
+          startHour: finalCandidate.startHour,
+        }),
+      });
+      const payload = (await response.json()) as {
+        finalTime?: EventFinalTime;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.finalTime) {
+        throw new Error(payload.error ?? "确认最终时间失败");
+      }
+
+      setData((current) => {
+        if (!current) return current;
+        const next = {
+          ...current,
+          event: { ...current.event, finalTime: payload.finalTime ?? null },
+        };
+        dataRef.current = next;
+        return next;
+      });
+      setFinalCandidate(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "确认最终时间失败");
+    } finally {
+      setFinalSaving(false);
+    }
+  };
+
+  const cancelFinalTime = async () => {
+    if (!identity || !data?.event.finalTime) return;
+    setFinalSaving(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}/final-time`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "取消最终时间失败");
+      }
+
+      setData((current) => {
+        if (!current) return current;
+        const next = {
+          ...current,
+          event: { ...current.event, finalTime: null },
+        };
+        dataRef.current = next;
+        return next;
+      });
+      setShowCancelFinalConfirm(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "取消最终时间失败");
+    } finally {
+      setFinalSaving(false);
+    }
+  };
+
+  const shareResultImage = async () => {
+    if (!data?.event.finalTime) return;
+    setSharingImage(true);
+    setShareFeedback("");
+
+    try {
+      const blob = await createResultImage(data, finalTimeMembers);
+      const safeEventName = data.event.name.replace(/[\\/:*?"<>|]/g, "-");
+      const file = new File([blob], `${safeEventName}-最终时间.png`, {
+        type: "image/png",
+      });
+
+      if (
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] })
+      ) {
+        await navigator.share({
+          title: `${data.event.name} · 最终时间`,
+          text: `${formatFinalDate(data.event.finalTime.date)} ${formatFinalTimeRange(data.event.finalTime.startHour)}`,
+          files: [file],
+        });
+        setShareFeedback("已打开系统分享菜单");
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setShareFeedback("当前浏览器不支持直接分享，图片已保存");
+      }
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        return;
+      }
+      setShareFeedback(
+        caught instanceof Error ? caught.message : "生成分享图片失败",
+      );
+    } finally {
+      setSharingImage(false);
+    }
+  };
+
   const joinFromSharedLink = async (displayId: string, tagName: string) => {
     let activeIdentity = identity;
 
@@ -774,6 +1103,174 @@ export function EventWorkspace({ code }: { code: string }) {
         </div>
 
         {error ? <p className="form-error mb-5">{error}</p> : null}
+
+        {data.event.finalTime ? (
+          <section className="mb-5 rounded-[20px] border border-blue-200/80 bg-[#eef5fc] p-5 shadow-[0_12px_36px_rgba(52,120,246,0.08)] sm:flex sm:items-center sm:justify-between sm:gap-6">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-semibold text-blue-600">
+                <CheckCircleIcon size={18} weight="fill" />
+                已确定最终时间
+              </p>
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <h2 className="text-2xl font-semibold tracking-[-0.025em] text-slate-950">
+                  {formatFinalDate(data.event.finalTime.date)}
+                </h2>
+                <p className="text-xl font-semibold tabular-nums text-[var(--accent)]">
+                  {formatFinalTimeRange(data.event.finalTime.startHour)}
+                </p>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                {getEventTimeZoneLabel(data.event.timeZone)} · 可参加 {finalTimeMembers.length}/{data.members.length} 人
+              </p>
+              {finalTimeMembers.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {finalTimeMembers.map((member) => (
+                    <span
+                      key={member.id}
+                      className="rounded-lg bg-white/75 px-2.5 py-1 text-xs font-semibold"
+                      style={{ color: member.tagColor }}
+                    >
+                      {member.tagName}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-5 flex shrink-0 flex-wrap gap-2 sm:mt-0 sm:justify-end">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => void shareResultImage()}
+                disabled={sharingImage}
+              >
+                <ShareNetworkIcon size={18} weight="bold" />
+                {sharingImage ? "正在生成" : "分享结果图"}
+              </button>
+              {data.event.isCreator ? (
+                <button
+                  type="button"
+                  className="secondary-button text-red-600 hover:border-red-200 hover:bg-red-50"
+                  onClick={() => setShowCancelFinalConfirm(true)}
+                >
+                  取消最终时间
+                </button>
+              ) : null}
+              {shareFeedback ? (
+                <p className="w-full text-xs leading-5 text-slate-500 sm:text-right">
+                  {shareFeedback}
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        <section className="mb-5 rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_12px_36px_rgba(67,83,108,0.05)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-950">
+                推荐共同时间
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                根据当前周的空闲记录自动排序，人数相同时优先显示较早时间。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
+              {([
+                ["recommended", "推荐排序"],
+                ["everyone", "全员有空"],
+                ["three", "至少 3 人"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                    recommendationFilter === value
+                      ? "bg-white text-slate-800 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                  onClick={() => setRecommendationFilter(value)}
+                  disabled={value === "three" && data.members.length < 3}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visibleRecommendations.length > 0 ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {visibleRecommendations.map((slot, index) => {
+                const isBest =
+                  recommendationFilter === "recommended" && index === 0;
+                const isFinal =
+                  data.event.finalTime?.date === slot.date &&
+                  data.event.finalTime.startHour === slot.startHour;
+                return (
+                  <article
+                    key={slotKey(slot.date, slot.startHour)}
+                    className={`rounded-2xl border p-4 ${
+                      isFinal
+                        ? "border-blue-300 bg-blue-50/70"
+                        : "border-slate-200 bg-slate-50/65"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {formatFinalDate(slot.date)}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+                          {formatFinalTimeRange(slot.startHour)}
+                        </p>
+                      </div>
+                      <span className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-600 shadow-sm">
+                        {slot.members.length}/{data.members.length} 人
+                      </span>
+                    </div>
+                    <div className="mt-3 flex min-h-6 flex-wrap gap-1.5">
+                      {slot.members.slice(0, 4).map((member) => (
+                        <span
+                          key={member.id}
+                          className="max-w-24 truncate rounded-md bg-white px-2 py-1 text-[11px] font-semibold"
+                          style={{ color: member.tagColor }}
+                        >
+                          {member.tagName}
+                        </span>
+                      ))}
+                      {slot.members.length > 4 ? (
+                        <span className="px-1 py-1 text-[11px] font-semibold text-slate-400">
+                          +{slot.members.length - 4}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <span className="text-xs font-medium text-slate-400">
+                        {isFinal ? "当前最终时间" : isBest ? "当前最优" : "候选时间"}
+                      </span>
+                      {data.event.isCreator && !isFinal ? (
+                        <button
+                          type="button"
+                          className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#2469df] active:scale-[0.98]"
+                          onClick={() => setFinalCandidate(slot)}
+                        >
+                          {data.event.finalTime ? "改为此时间" : "确定此时间"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+              {recommendationFilter === "everyone"
+                ? "当前周还没有所有人都有空的时间"
+                : recommendationFilter === "three"
+                  ? "当前周还没有至少 3 人有空的时间"
+                  : "当前周还没有可推荐的空闲时间"}
+            </p>
+          )}
+        </section>
 
         <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
           <aside className="h-fit rounded-[18px] border border-slate-200/80 bg-white p-4 lg:sticky lg:top-5">
@@ -970,6 +1467,9 @@ export function EventWorkspace({ code }: { code: string }) {
                       const slotMembers = membersBySlot.get(slotKey(date, hour)) ?? [];
                       const ownSelected = slotMembers.some((member) => member.id === data.currentMemberId);
                       const disabled = !valid || past || data.event.status !== "active";
+                      const isFinal =
+                        data.event.finalTime?.date === date &&
+                        data.event.finalTime.startHour === hour;
 
                       if (!valid) {
                         return <div key={date} className="min-h-[68px] border-l border-slate-100 bg-slate-50/45" />;
@@ -981,16 +1481,19 @@ export function EventWorkspace({ code }: { code: string }) {
                           key={date}
                           disabled={disabled}
                           onClick={() => toggleSlot(date, hour)}
-                          className={`min-h-[68px] border-l border-slate-100 p-2 text-left transition-colors ${
-                            past
+                          className={`relative min-h-[68px] border-l border-slate-100 p-2 text-left transition-colors ${
+                            isFinal
+                              ? "bg-amber-50 ring-2 ring-inset ring-amber-400"
+                              : past
                               ? "bg-slate-100/70 text-slate-400"
                               : ownSelected
                                 ? "bg-blue-50/70 ring-1 ring-inset ring-blue-300"
                                 : "bg-white hover:bg-blue-50/40"
                           }`}
-                          aria-label={`${date} ${hour}:00 至 ${hour + 1}:00`}
+                          aria-label={`${date} ${hour}:00 至 ${hour + 1}:00，${slotMembers.length}/${data.members.length} 人有空${isFinal ? "，已确定为最终时间" : ""}`}
                         >
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex items-start justify-between gap-1">
+                            <div className="flex flex-wrap gap-1">
                             {slotMembers.slice(0, 3).map((member) => (
                               <span
                                 key={member.id}
@@ -1005,7 +1508,22 @@ export function EventWorkspace({ code }: { code: string }) {
                                 +{slotMembers.length - 3}
                               </span>
                             ) : null}
+                            </div>
+                            {slotMembers.length > 0 ? (
+                              <span className={`shrink-0 rounded-md px-1.5 py-1 text-[10px] font-bold tabular-nums ${
+                                isFinal
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}>
+                                {slotMembers.length}/{data.members.length}
+                              </span>
+                            ) : null}
                           </div>
+                          {isFinal ? (
+                            <span className="absolute bottom-1.5 right-2 text-[10px] font-bold text-amber-700">
+                              最终时间
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}
@@ -1030,6 +1548,90 @@ export function EventWorkspace({ code }: { code: string }) {
           </section>
         </div>
       </div>
+
+      {finalCandidate ? (
+        <Modal
+          title={data.event.finalTime ? "修改最终时间" : "确认最终时间"}
+          onClose={() => {
+            if (!finalSaving) setFinalCandidate(null);
+          }}
+        >
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-700">
+              {formatFinalDate(finalCandidate.date)}
+            </p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">
+              {formatFinalTimeRange(finalCandidate.startHour)}
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              {getEventTimeZoneLabel(data.event.timeZone)} · {finalCandidate.members.length}/{data.members.length} 人可参加
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {finalCandidate.members.map((member) => (
+                <span
+                  key={member.id}
+                  className="rounded-lg bg-white px-2.5 py-1 text-xs font-semibold"
+                  style={{ color: member.tagColor }}
+                >
+                  {member.tagName}
+                </span>
+              ))}
+            </div>
+          </div>
+          <p className="mt-4 text-sm leading-6 text-slate-500">
+            确认后会通知事件中的所有参与者。之后仍可选择其他候选时间，或取消最终时间。
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              className="secondary-button justify-center"
+              onClick={() => setFinalCandidate(null)}
+              disabled={finalSaving}
+            >
+              返回
+            </button>
+            <button
+              type="button"
+              className="primary-button justify-center"
+              onClick={() => void saveFinalTime()}
+              disabled={finalSaving}
+            >
+              {finalSaving ? "正在确认" : "确认并通知"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {showCancelFinalConfirm ? (
+        <Modal
+          title="取消最终时间？"
+          onClose={() => {
+            if (!finalSaving) setShowCancelFinalConfirm(false);
+          }}
+        >
+          <p className="text-sm leading-6 text-slate-600">
+            取消后，已填写的空闲时间不会被删除。所有参与者会收到最终时间已取消的通知。
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              className="secondary-button justify-center"
+              onClick={() => setShowCancelFinalConfirm(false)}
+              disabled={finalSaving}
+            >
+              保留
+            </button>
+            <button
+              type="button"
+              className="flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+              onClick={() => void cancelFinalTime()}
+              disabled={finalSaving}
+            >
+              {finalSaving ? "正在取消" : "确认取消"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
 
       {showDeleteConfirm && identity ? (
         <DeleteEventModal

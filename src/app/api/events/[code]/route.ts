@@ -55,7 +55,7 @@ export async function GET(
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
     .select(
-      "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, status, creator_identity_id, created_at",
+      "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at",
     )
     .eq("share_code", code)
     .maybeSingle();
@@ -143,6 +143,16 @@ export async function GET(
       weeksAhead: event.weeks_ahead,
       eventType: event.event_type,
       timeZone: event.time_zone,
+      finalTime:
+        event.final_date !== null &&
+        event.final_start_hour !== null &&
+        event.finalized_at !== null
+          ? {
+              date: event.final_date,
+              startHour: event.final_start_hour,
+              finalizedAt: event.finalized_at,
+            }
+          : null,
       status: event.status,
       createdAt: event.created_at,
       isCreator: event.creator_identity_id === parsed.data.identityId,
