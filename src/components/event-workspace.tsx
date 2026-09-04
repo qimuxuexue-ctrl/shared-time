@@ -71,6 +71,23 @@ type RecommendationFilter = "recommended" | "everyone" | "two";
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+const OVERLAP_COLORS = [
+  "#ffffff",
+  "#f4f8ff",
+  "#eaf2ff",
+  "#dceaff",
+  "#c9ddfb",
+  "#afcff7",
+];
+
+function getOverlapColor(memberCount: number, totalMembers: number) {
+  if (memberCount === 0 || totalMembers === 0) return OVERLAP_COLORS[0];
+  const level = Math.max(
+    1,
+    Math.min(5, Math.ceil((memberCount / totalMembers) * 5)),
+  );
+  return OVERLAP_COLORS[level];
+}
 function slotKey(date: string, startHour: number) {
   return `${date}:${startHour}`;
 }
@@ -301,10 +318,15 @@ export function EventWorkspace({ code }: { code: string }) {
   const [showCancelFinalConfirm, setShowCancelFinalConfirm] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
   const [shareFeedback, setShareFeedback] = useState("");
+  const [canScrollRecommendationsLeft, setCanScrollRecommendationsLeft] =
+    useState(false);
+  const [canScrollRecommendationsRight, setCanScrollRecommendationsRight] =
+    useState(false);
   const dataRef = useRef<EventWorkspaceData | null>(null);
   const savedAvailabilityRef = useRef<AvailabilitySlot[]>([]);
   const pendingUpdatesRef = useRef(new Map<string, SlotUpdate>());
   const saveTimerRef = useRef<number | null>(null);
+  const recommendationScrollRef = useRef<HTMLDivElement | null>(null);
   const saveInFlightRef = useRef(false);
   const flushPendingUpdatesRef = useRef<() => Promise<void>>(async () => {});
 
@@ -474,8 +496,43 @@ export function EventWorkspace({ code }: { code: string }) {
         : recommendationFilter === "two"
           ? rankedSlots.filter((slot) => slot.members.length >= 2)
           : rankedSlots;
-    return filtered.slice(0, 6);
+    return filtered.slice(0, 12);
   }, [data, rankedSlots, recommendationFilter]);
+
+  const updateRecommendationNavigation = useCallback(() => {
+    const scroller = recommendationScrollRef.current;
+    if (!scroller) return;
+    setCanScrollRecommendationsLeft(scroller.scrollLeft > 4);
+    setCanScrollRecommendationsRight(
+      scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4,
+    );
+  }, []);
+
+  useEffect(() => {
+    const scroller = recommendationScrollRef.current;
+    if (!scroller) return;
+
+    scroller.scrollTo({ left: 0 });
+    updateRecommendationNavigation();
+    scroller.addEventListener("scroll", updateRecommendationNavigation, {
+      passive: true,
+    });
+    window.addEventListener("resize", updateRecommendationNavigation);
+
+    return () => {
+      scroller.removeEventListener("scroll", updateRecommendationNavigation);
+      window.removeEventListener("resize", updateRecommendationNavigation);
+    };
+  }, [recommendationFilter, updateRecommendationNavigation, visibleRecommendations]);
+
+  const scrollRecommendations = (direction: -1 | 1) => {
+    const scroller = recommendationScrollRef.current;
+    if (!scroller) return;
+    scroller.scrollBy({
+      left: direction * scroller.clientWidth,
+      behavior: "smooth",
+    });
+  };
 
   const ownNote = useMemo(
     () => data?.notes.find((note) => note.isCurrent) ?? null,
@@ -1174,31 +1231,56 @@ export function EventWorkspace({ code }: { code: string }) {
                 根据当前周的空闲记录自动排序，人数相同时优先显示较早时间。
               </p>
             </div>
-            <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
-              {([
-                ["recommended", "推荐排序"],
-                ["everyone", "全员有空"],
-                ["two", "至少 2 人"],
-              ] as const).map(([value, label]) => (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
+                {([
+                  ["recommended", "推荐排序"],
+                  ["everyone", "全员有空"],
+                  ["two", "至少 2 人"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                      recommendationFilter === value
+                        ? "bg-white text-slate-800 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                    onClick={() => setRecommendationFilter(value)}
+                    disabled={value === "two" && data.members.length < 2}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1.5">
                 <button
-                  key={value}
                   type="button"
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                    recommendationFilter === value
-                      ? "bg-white text-slate-800 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                  onClick={() => setRecommendationFilter(value)}
-                  disabled={value === "two" && data.members.length < 2}
+                  className="icon-button size-9 disabled:opacity-30"
+                  onClick={() => scrollRecommendations(-1)}
+                  disabled={!canScrollRecommendationsLeft}
+                  aria-label="上一组推荐时间"
                 >
-                  {label}
+                  <CaretLeftIcon size={16} weight="bold" />
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="icon-button size-9 disabled:opacity-30"
+                  onClick={() => scrollRecommendations(1)}
+                  disabled={!canScrollRecommendationsRight}
+                  aria-label="下一组推荐时间"
+                >
+                  <CaretRightIcon size={16} weight="bold" />
+                </button>
+              </div>
             </div>
           </div>
 
           {visibleRecommendations.length > 0 ? (
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div
+              ref={recommendationScrollRef}
+              className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {visibleRecommendations.map((slot, index) => {
                 const isBest =
                   recommendationFilter === "recommended" && index === 0;
@@ -1208,7 +1290,7 @@ export function EventWorkspace({ code }: { code: string }) {
                 return (
                   <article
                     key={slotKey(slot.date, slot.startHour)}
-                    className={`rounded-2xl border p-4 ${
+                    className={`min-w-0 shrink-0 basis-full snap-start rounded-2xl border p-4 sm:basis-[calc(50%-0.375rem)] xl:basis-[calc((100%-1.5rem)/3)] ${
                       isFinal
                         ? "border-blue-300 bg-blue-50/70"
                         : "border-slate-200 bg-slate-50/65"
@@ -1432,6 +1514,26 @@ export function EventWorkspace({ code }: { code: string }) {
           </aside>
 
           <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_40px_rgba(67,83,108,0.05)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
+              <span>时间格会随 Tag 数量自动向下伸展</span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span>重合度</span>
+                <span className="flex overflow-hidden rounded-md border border-slate-200">
+                  {OVERLAP_COLORS.slice(1).map((color) => (
+                    <span
+                      key={color}
+                      className="size-4"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </span>
+                <span>浅 → 深</span>
+                <span className="ml-1 flex items-center gap-1.5">
+                  <span className="size-3 rounded-sm border border-amber-400 bg-amber-50" />
+                  最终时间
+                </span>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <div className="min-w-[910px]">
                 <div className="grid grid-cols-[68px_repeat(7,minmax(118px,1fr))] border-b border-slate-200">
@@ -1481,20 +1583,29 @@ export function EventWorkspace({ code }: { code: string }) {
                           key={date}
                           disabled={disabled}
                           onClick={() => toggleSlot(date, hour)}
-                          className={`relative min-h-[68px] border-l border-slate-100 p-2 text-left transition-colors ${
+                          className={`relative h-auto min-h-[68px] self-stretch border-l border-slate-100 p-2.5 text-left transition-[filter,box-shadow] hover:brightness-[0.985] ${
                             isFinal
-                              ? "bg-amber-50 ring-2 ring-inset ring-amber-400"
+                              ? "ring-2 ring-inset ring-amber-400"
                               : past
-                              ? "bg-slate-100/70 text-slate-400"
+                              ? "text-slate-400"
                               : ownSelected
-                                ? "bg-blue-50/70 ring-1 ring-inset ring-blue-300"
-                                : "bg-white hover:bg-blue-50/40"
+                                ? "ring-1 ring-inset ring-blue-400"
+                                : ""
                           }`}
+                          style={{
+                            backgroundColor: isFinal
+                              ? "#fff7df"
+                              : past
+                                ? "#f1f5f9"
+                                : getOverlapColor(
+                                    slotMembers.length,
+                                    data.members.length,
+                                  ),
+                          }}
                           aria-label={`${date} ${hour}:00 至 ${hour + 1}:00，${slotMembers.length}/${data.members.length} 人有空${isFinal ? "，已确定为最终时间" : ""}`}
                         >
-                          <div className="flex items-start justify-between gap-1">
-                            <div className="flex flex-wrap gap-1">
-                            {slotMembers.slice(0, 3).map((member) => (
+                          <div className="flex flex-wrap content-start gap-1.5">
+                            {slotMembers.map((member) => (
                               <span
                                 key={member.id}
                                 className="max-w-full truncate rounded-md px-1.5 py-1 text-[11px] font-semibold leading-none"
@@ -1503,21 +1614,6 @@ export function EventWorkspace({ code }: { code: string }) {
                                 {member.tagName}
                               </span>
                             ))}
-                            {slotMembers.length > 3 ? (
-                              <span className="rounded-md bg-slate-100 px-1.5 py-1 text-[11px] font-semibold leading-none text-slate-500">
-                                +{slotMembers.length - 3}
-                              </span>
-                            ) : null}
-                            </div>
-                            {slotMembers.length > 0 ? (
-                              <span className={`shrink-0 rounded-md px-1.5 py-1 text-[10px] font-bold tabular-nums ${
-                                isFinal
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-slate-100 text-slate-500"
-                              }`}>
-                                {slotMembers.length}/{data.members.length}
-                              </span>
-                            ) : null}
                           </div>
                           {isFinal ? (
                             <span className="absolute bottom-1.5 right-2 text-[10px] font-bold text-amber-700">
