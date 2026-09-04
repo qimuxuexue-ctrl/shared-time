@@ -94,6 +94,7 @@ export type EventWorkspaceData = {
     eventType: EventType;
     timeZone: EventTimeZone;
     finalTime: EventFinalTime | null;
+    finalNote: string | null;
     status: "active" | "closed" | "archived";
     createdAt: string;
     isCreator: boolean;

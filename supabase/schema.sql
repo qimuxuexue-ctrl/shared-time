@@ -33,6 +33,7 @@ create table if not exists public.events (
   final_date date,
   final_start_hour smallint,
   finalized_at timestamptz,
+  final_note text,
   status text not null default 'active',
   last_member_activity_at timestamptz,
   last_note_activity_at timestamptz,
@@ -49,6 +50,9 @@ create table if not exists public.events (
     or
     (final_date is not null and final_start_hour between 10 and 23 and finalized_at is not null)
   ),
+  constraint events_final_note_length check (
+    final_note is null or char_length(final_note) <= 300
+  ),
   constraint events_status_values check (status in ('active', 'closed', 'archived'))
 );
 
@@ -61,7 +65,8 @@ alter table public.events
 alter table public.events
   add column if not exists final_date date,
   add column if not exists final_start_hour smallint,
-  add column if not exists finalized_at timestamptz;
+  add column if not exists finalized_at timestamptz,
+  add column if not exists final_note text;
 
 alter table public.events
   drop constraint if exists events_event_type_values;
@@ -85,6 +90,14 @@ alter table public.events
     (final_date is null and final_start_hour is null and finalized_at is null)
     or
     (final_date is not null and final_start_hour between 10 and 23 and finalized_at is not null)
+  );
+
+alter table public.events
+  drop constraint if exists events_final_note_length;
+
+alter table public.events
+  add constraint events_final_note_length check (
+    final_note is null or char_length(final_note) <= 300
   );
 
 alter table public.events

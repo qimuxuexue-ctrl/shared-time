@@ -23,6 +23,10 @@ const finalTimeSchema = identitySchema.extend({
   startHour: z.number().int().min(10).max(23),
 });
 
+const finalNoteSchema = identitySchema.extend({
+  content: z.string().trim().max(300, "补充说明不能超过 300 字"),
+});
+
 type EventRow = {
   id: string;
   share_code: string;
@@ -31,6 +35,7 @@ type EventRow = {
   start_date: string;
   event_type: "one_time" | "ongoing";
   time_zone: "Asia/Shanghai" | "Asia/Tokyo";
+  final_date: string | null;
   status: "active" | "closed" | "archived";
 };
 
@@ -38,10 +43,61 @@ async function getEvent(code: string) {
   return supabaseAdmin
     .from("events")
     .select(
-      "id, share_code, name, creator_identity_id, start_date, event_type, time_zone, status",
+      "id, share_code, name, creator_identity_id, start_date, event_type, time_zone, final_date, status",
     )
     .eq("share_code", code)
     .maybeSingle<EventRow>();
+}
+
+export async function PATCH(
+  request: Request,
+  context: RouteContext<"/api/events/[code]/final-time">,
+) {
+  const { code: rawCode } = await context.params;
+  const code = rawCode.trim().toUpperCase();
+
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return Response.json({ error: "邀请码格式不正确" }, { status: 400 });
+  }
+
+  const payload = await request.json().catch(() => null);
+  const parsed = finalNoteSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return validationError(parsed.error);
+  }
+
+  const { data: event, error: eventError } = await getEvent(code);
+
+  if (eventError) return serverError();
+  if (!event) {
+    return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
+  }
+  if (event.creator_identity_id !== parsed.data.identityId) {
+    return Response.json(
+      { error: "只有事件创建者可以修改最终安排说明" },
+      { status: 403 },
+    );
+  }
+  if (!event.final_date) {
+    return Response.json({ error: "请先确定最终时间" }, { status: 409 });
+  }
+  if (event.status !== "active") {
+    return Response.json({ error: "这个事件已经关闭" }, { status: 409 });
+  }
+
+  const finalNote = parsed.data.content || null;
+  const { error: updateError } = await supabaseAdmin
+    .from("events")
+    .update({ final_note: finalNote })
+    .eq("id", event.id)
+    .eq("creator_identity_id", parsed.data.identityId);
+
+  if (updateError) {
+    return serverError("保存补充说明失败，请确认数据库更新已完成");
+  }
+
+  return Response.json({ finalNote });
 }
 
 async function clearOppositeNotification(
@@ -186,6 +242,12 @@ export async function DELETE(
   if (updateError) {
     return serverError("取消最终时间失败，请稍后重试");
   }
+
+  await supabaseAdmin
+    .from("events")
+    .update({ final_note: null })
+    .eq("id", event.id)
+    .eq("creator_identity_id", parsed.data.identityId);
 
   try {
     await clearOppositeNotification(event.id, "final_time");

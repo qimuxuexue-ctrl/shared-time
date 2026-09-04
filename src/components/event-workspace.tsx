@@ -153,6 +153,32 @@ function drawWrappedText(
   if (line) context.fillText(line, x, currentY);
 }
 
+function getWrappedTextLines(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  const lines: string[] = [];
+  let line = "";
+
+  for (const character of text) {
+    if (character === "\n") {
+      lines.push(line);
+      line = "";
+      continue;
+    }
+    const candidate = `${line}${character}`;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = character;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line || lines.length === 0) lines.push(line);
+  return lines;
+}
+
 async function loadCanvasImage(source: string) {
   const image = new Image();
   image.src = source;
@@ -167,16 +193,33 @@ async function createResultImage(
   const finalTime = data.event.finalTime;
   if (!finalTime) throw new Error("还没有确定最终时间");
 
+  const finalNote = data.event.finalNote?.trim() ?? "";
+  const measurementCanvas = document.createElement("canvas");
+  const measurementContext = measurementCanvas.getContext("2d");
+  if (!measurementContext) throw new Error("无法生成分享图片");
+  measurementContext.font =
+    '500 30px "Microsoft YaHei", "PingFang SC", sans-serif';
+  const finalNoteLines = finalNote
+    ? getWrappedTextLines(measurementContext, finalNote, 780)
+    : [];
+  const noteCardHeight = finalNoteLines.length
+    ? 120 + finalNoteLines.length * 46
+    : 0;
+  const noteCardY = 1162;
+  const footerY = finalNoteLines.length
+    ? noteCardY + noteCardHeight + 72
+    : 1212;
+
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
-  canvas.height = 1350;
+  canvas.height = Math.max(1350, footerY + 90);
   const context = canvas.getContext("2d");
   if (!context) throw new Error("无法生成分享图片");
 
   context.fillStyle = "#f3f5f8";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "#ffffff";
-  drawRoundedRect(context, 70, 64, 940, 1222, 48);
+  drawRoundedRect(context, 70, 64, 940, canvas.height - 128, 48);
 
   try {
     const character = await loadCanvasImage("/brand-character.png");
@@ -232,9 +275,22 @@ async function createResultImage(
     58,
   );
 
+  if (finalNoteLines.length) {
+    context.fillStyle = "#f8fafc";
+    drawRoundedRect(context, 108, noteCardY, 864, noteCardHeight, 32);
+    context.fillStyle = "#64748b";
+    context.font = '600 28px "Microsoft YaHei", "PingFang SC", sans-serif';
+    context.fillText("补充说明", 150, noteCardY + 56);
+    context.fillStyle = "#1e293b";
+    context.font = '500 30px "Microsoft YaHei", "PingFang SC", sans-serif';
+    finalNoteLines.forEach((line, index) => {
+      context.fillText(line, 150, noteCardY + 112 + index * 46);
+    });
+  }
+
   context.fillStyle = "#94a3b8";
   context.font = '500 28px "Microsoft YaHei", "PingFang SC", sans-serif';
-  context.fillText("最终时间由事件创建者确认", 116, 1212);
+  context.fillText("最终时间由事件创建者确认", 116, footerY);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -316,6 +372,9 @@ export function EventWorkspace({ code }: { code: string }) {
   );
   const [finalSaving, setFinalSaving] = useState(false);
   const [showCancelFinalConfirm, setShowCancelFinalConfirm] = useState(false);
+  const [editingFinalNote, setEditingFinalNote] = useState(false);
+  const [finalNoteSaving, setFinalNoteSaving] = useState(false);
+  const [finalNoteError, setFinalNoteError] = useState("");
   const [sharingImage, setSharingImage] = useState(false);
   const [shareFeedback, setShareFeedback] = useState("");
   const [canScrollRecommendationsLeft, setCanScrollRecommendationsLeft] =
@@ -911,7 +970,7 @@ export function EventWorkspace({ code }: { code: string }) {
         if (!current) return current;
         const next = {
           ...current,
-          event: { ...current.event, finalTime: null },
+          event: { ...current.event, finalTime: null, finalNote: null },
         };
         dataRef.current = next;
         return next;
@@ -921,6 +980,48 @@ export function EventWorkspace({ code }: { code: string }) {
       setError(caught instanceof Error ? caught.message : "取消最终时间失败");
     } finally {
       setFinalSaving(false);
+    }
+  };
+
+  const saveFinalNote = async (content: string) => {
+    if (!identity || !data?.event.finalTime || !data.event.isCreator) return;
+    setFinalNoteSaving(true);
+    setFinalNoteError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}/final-time`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id, content }),
+      });
+      const payload = (await response.json()) as {
+        finalNote?: string | null;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "保存补充说明失败");
+      }
+
+      setData((current) => {
+        if (!current) return current;
+        const next = {
+          ...current,
+          event: {
+            ...current.event,
+            finalNote: payload.finalNote?.trim() || null,
+          },
+        };
+        dataRef.current = next;
+        return next;
+      });
+      setEditingFinalNote(false);
+    } catch (caught) {
+      setFinalNoteError(
+        caught instanceof Error ? caught.message : "保存补充说明失败",
+      );
+    } finally {
+      setFinalNoteSaving(false);
     }
   };
 
@@ -943,7 +1044,7 @@ export function EventWorkspace({ code }: { code: string }) {
       ) {
         await navigator.share({
           title: `${data.event.name} · 最终时间`,
-          text: `${formatFinalDate(data.event.finalTime.date)} ${formatFinalTimeRange(data.event.finalTime.startHour)}`,
+          text: `${formatFinalDate(data.event.finalTime.date)} ${formatFinalTimeRange(data.event.finalTime.startHour)}${data.event.finalNote ? `\n${data.event.finalNote}` : ""}`,
           files: [file],
         });
         setShareFeedback("已打开系统分享菜单");
@@ -1192,8 +1293,33 @@ export function EventWorkspace({ code }: { code: string }) {
                   ))}
                 </div>
               ) : null}
+              {data.event.finalNote ? (
+                <div className="mt-3 flex max-w-2xl items-start gap-2 rounded-xl border border-blue-100/90 bg-white/80 px-3 py-2.5 text-sm leading-6 text-slate-600">
+                  <NotePencilIcon
+                    className="mt-1 shrink-0 text-slate-400"
+                    size={15}
+                    weight="bold"
+                  />
+                  <p className="whitespace-pre-wrap break-words">
+                    {data.event.finalNote}
+                  </p>
+                </div>
+              ) : null}
             </div>
             <div className="mt-5 flex shrink-0 flex-wrap gap-2 sm:mt-0 sm:justify-end">
+              {data.event.isCreator ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setFinalNoteError("");
+                    setEditingFinalNote(true);
+                  }}
+                >
+                  <NotePencilIcon size={18} weight="bold" />
+                  {data.event.finalNote ? "修改说明" : "补充说明"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="primary-button"
@@ -1733,6 +1859,20 @@ export function EventWorkspace({ code }: { code: string }) {
         </Modal>
       ) : null}
 
+      {editingFinalNote ? (
+        <FinalNoteModal
+          initialContent={data.event.finalNote ?? ""}
+          saving={finalNoteSaving}
+          error={finalNoteError}
+          onClose={() => {
+            if (finalNoteSaving) return;
+            setEditingFinalNote(false);
+            setFinalNoteError("");
+          }}
+          onSave={(content) => void saveFinalNote(content)}
+        />
+      ) : null}
+
       {showDeleteConfirm && identity ? (
         <DeleteEventModal
           identity={identity}
@@ -1756,6 +1896,70 @@ export function EventWorkspace({ code }: { code: string }) {
         />
       ) : null}
     </main>
+  );
+}
+
+function FinalNoteModal({
+  initialContent,
+  saving,
+  error,
+  onClose,
+  onSave,
+}: {
+  initialContent: string;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (content: string) => void;
+}) {
+  const [content, setContent] = useState(initialContent);
+
+  return (
+    <Modal title="最终安排补充" onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(content.trim());
+        }}
+      >
+        <label htmlFor="final-note" className="field-label">
+          补充说明
+        </label>
+        <textarea
+          id="final-note"
+          className="text-input min-h-36 resize-y leading-6"
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          placeholder="例如：YY 频道 123456；或填写腾讯会议号、集合地点等信息"
+          maxLength={300}
+          autoFocus
+        />
+        <div className="mt-2 flex items-start justify-between gap-4 text-xs leading-5 text-slate-500">
+          <p>所有参与者都能看到，生成分享结果图时也会一并显示。</p>
+          <span className="shrink-0 tabular-nums">{content.length}/300</span>
+        </div>
+
+        {error ? <p className="form-error">{error}</p> : null}
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            className="secondary-button justify-center"
+            onClick={onClose}
+            disabled={saving}
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            className="primary-button justify-center"
+            disabled={saving || content.trim() === initialContent.trim()}
+          >
+            {saving ? "正在保存" : content.trim() ? "保存说明" : "清除说明"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
