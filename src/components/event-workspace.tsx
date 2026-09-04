@@ -1608,10 +1608,14 @@ export function EventWorkspace({ code }: { code: string }) {
                             {slotMembers.map((member) => (
                               <span
                                 key={member.id}
-                                className="max-w-full truncate rounded-md px-1.5 py-1 text-[11px] font-semibold leading-none"
-                                style={{ color: member.tagColor, backgroundColor: `${member.tagColor}16` }}
+                                className="inline-flex max-w-full items-center gap-1.5 truncate rounded-md border bg-white px-1.5 py-1 text-[11px] font-semibold leading-none text-slate-700 shadow-[0_1px_2px_rgba(71,85,105,0.08)]"
+                                style={{ borderColor: `${member.tagColor}55` }}
                               >
-                                {member.tagName}
+                                <span
+                                  className="size-1.5 shrink-0 rounded-full"
+                                  style={{ backgroundColor: member.tagColor }}
+                                />
+                                <span className="truncate">{member.tagName}</span>
                               </span>
                             ))}
                           </div>
