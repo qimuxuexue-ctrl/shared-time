@@ -431,6 +431,7 @@ export function EventWorkspace({ code }: { code: string }) {
     useState<RecommendationFilter>("recommended");
   const [recommendationDuration, setRecommendationDuration] = useState<1 | 2 | 3>(1);
   const [finalPlanSeed, setFinalPlanSeed] = useState<EventFinalPeriod[] | null>(null);
+  const [pendingPeriods, setPendingPeriods] = useState<EventFinalPeriod[]>([]);
   const [finalSaving, setFinalSaving] = useState(false);
   const [finalPlanError, setFinalPlanError] = useState("");
   const [showCancelFinalConfirm, setShowCancelFinalConfirm] = useState(false);
@@ -1047,6 +1048,7 @@ export function EventWorkspace({ code }: { code: string }) {
         return next;
       });
       setFinalPlanSeed(null);
+      setPendingPeriods([]);
     } catch (caught) {
       setFinalPlanError(
         caught instanceof Error ? caught.message : "保存时间方案失败",
@@ -1444,7 +1446,7 @@ export function EventWorkspace({ code }: { code: string }) {
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => openFinalPlan(data.event.finalPeriods)}
+                  onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
                 >
                   <PencilSimpleIcon size={18} weight="bold" />
                   修改时间
@@ -1497,53 +1499,32 @@ export function EventWorkspace({ code }: { code: string }) {
                 推荐共同时间
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                按整段时间都有空的人数排序，人数相同时优先显示较早时间。
+                可选择一周内多个时间段，选好后统一确认安排。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 p-1">
-                <span className="px-2 text-xs font-semibold text-slate-500">时长</span>
-                {([1, 2, 3] as const).map((duration) => (
-                  <button
-                    key={duration}
-                    type="button"
-                    className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition ${
-                      recommendationDuration === duration
-                        ? "bg-white text-slate-800 shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                    onClick={() => setRecommendationDuration(duration)}
-                  >
-                    {duration} 小时
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
-                {([
-                  ["recommended", "推荐排序"],
-                  ["everyone", "全员有空"],
-                  ["two", "至少 2 人"],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                      recommendationFilter === value
-                        ? "bg-white text-slate-800 shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                    onClick={() => setRecommendationFilter(value)}
-                    disabled={value === "two" && data.members.length < 2}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                时长
+                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                  value={recommendationDuration}
+                  onChange={(event) => setRecommendationDuration(Number(event.target.value) as 1 | 2 | 3)}>
+                  <option value={1}>1 小时</option>
+                  <option value={2}>2 小时</option>
+                  <option value={3}>3 小时</option>
+                </select>
+              </label>
+              <select aria-label="推荐时间筛选" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                value={recommendationFilter}
+                onChange={(event) => setRecommendationFilter(event.target.value as RecommendationFilter)}>
+                <option value="recommended">推荐排序</option>
+                <option value="everyone">全员有空</option>
+                <option value="two" disabled={data.members.length < 2}>至少 2 人</option>
+              </select>
               {data.event.isCreator ? (
                 <button
                   type="button"
                   className="secondary-button min-h-9 px-3 py-2 text-xs"
-                  onClick={() => openFinalPlan(data.event.finalPeriods)}
+                  onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
                 >
                   <PlusIcon size={15} weight="bold" />
                   自选时间段
@@ -1572,6 +1553,16 @@ export function EventWorkspace({ code }: { code: string }) {
             </div>
           </div>
 
+          {pendingPeriods.length > 0 && data.event.isCreator ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-slate-600">
+              <span aria-live="polite">已选 {pendingPeriods.length} 个时间段 · 尚未确认</span>
+              <div className="flex items-center gap-3">
+                <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => setPendingPeriods([])}>清空选择</button>
+                <button type="button" className="text-sm font-semibold text-blue-600" onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}>查看并确认</button>
+              </div>
+            </div>
+          ) : null}
+
           {visibleRecommendations.length > 0 ? (
             <div
               ref={recommendationScrollRef}
@@ -1585,6 +1576,9 @@ export function EventWorkspace({ code }: { code: string }) {
                     period.date === slot.date &&
                     period.startHour === slot.startHour &&
                     period.endHour === slot.endHour,
+                );
+                const isPending = pendingPeriods.some((period) =>
+                  period.date === slot.date && period.startHour === slot.startHour && period.endHour === slot.endHour,
                 );
                 return (
                   <article
@@ -1632,22 +1626,14 @@ export function EventWorkspace({ code }: { code: string }) {
                         <button
                           type="button"
                           className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#2469df] active:scale-[0.98]"
-                          onClick={() =>
-                            openFinalPlan(
-                              normalizeFinalPeriods([
-                                ...data.event.finalPeriods,
-                                {
-                                  date: slot.date,
-                                  startHour: slot.startHour,
-                                  endHour: slot.endHour,
-                                },
-                              ]),
-                            )
-                          }
+                          aria-pressed={isPending}
+                          onClick={() => setPendingPeriods((current) =>
+                            isPending
+                              ? current.filter((period) => !(period.date === slot.date && period.startHour === slot.startHour && period.endHour === slot.endHour))
+                              : [...current, { date: slot.date, startHour: slot.startHour, endHour: slot.endHour }],
+                          )}
                         >
-                          {data.event.finalPeriods.length > 0
-                            ? "加入安排"
-                            : "使用此时间"}
+                          {isPending ? "已选择 · 取消" : "选择此时间"}
                         </button>
                       ) : null}
                     </div>
