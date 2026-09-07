@@ -5,6 +5,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   CursorClickIcon,
+  NotePencilIcon,
   ShareNetworkIcon,
   UserCircleIcon,
   XIcon,
@@ -16,7 +17,8 @@ const steps: Array<{
   number: string;
   title: string;
   description: ReactNode;
-  image: string;
+  image?: string;
+  visual?: "recommendations" | "final-plan";
   imageAlt: string;
   icon: ReactNode;
 }> = [
@@ -46,10 +48,10 @@ const steps: Array<{
   },
   {
     number: "03",
-    title: "标记空闲时间，补充备注",
+    title: "标记自己的空闲时间",
     description: (
       <>
-        点击时间格添加或移除自己的 Tag，点击星期标题可快速选择整段时间。需要说明课程、会议号等信息时，可以在备注区补充。
+        点击时间格添加或移除自己的 Tag，点击星期标题可以快速选择整段时间。
       </>
     ),
     image: "/guide/03-workspace.png",
@@ -58,15 +60,39 @@ const steps: Array<{
   },
   {
     number: "04",
-    title: "选择共同时间并分享",
+    title: "添加事件备注",
     description: (
       <>
-        系统会按空闲人数推荐时间。创建者可以设置本周安排次数和每次时长，也可以自选时间；统一确认后，可将全部安排和补充说明生成图片分享。
+        在备注区补充课程要求、会议号或其他说明。每位参与者都能看到，也只能修改或删除自己的备注。
       </>
     ),
     image: "/guide/03-workspace.png",
-    imageAlt: "Share timeline 推荐共同时间、确认安排与分享功能",
-    icon: <CheckCircleIcon size={19} weight="duotone" />,
+    imageAlt: "Share timeline 事件内的共享备注区域",
+    icon: <NotePencilIcon size={19} weight="duotone" />,
+  },
+  {
+    number: "05",
+    title: "选择推荐共同时间",
+    description: (
+      <>
+        系统会按空闲人数推荐时间。创建者可以设置安排次数和每次时长，也可以使用“自选或调整”选择其他时间。
+      </>
+    ),
+    visual: "recommendations",
+    imageAlt: "Share timeline 推荐共同时间与多次安排选择区域",
+    icon: <ClockIcon size={19} weight="duotone" />,
+  },
+  {
+    number: "06",
+    title: "确认并分享全部安排",
+    description: (
+      <>
+        选好各次时间后统一确认。确认结果可以连同补充说明生成一张图片，直接分享或保存。
+      </>
+    ),
+    visual: "final-plan",
+    imageAlt: "Share timeline 已确定时间方案与分享按钮",
+    icon: <ShareNetworkIcon size={19} weight="duotone" />,
   },
 ];
 
@@ -115,7 +141,7 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
               Share timeline 使用指南
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              四步完成一次共同空闲时间预约。
+              六步完成共同时间收集、确认与分享。
             </p>
           </div>
           <button
@@ -137,14 +163,18 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
                 className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white"
               >
                 <div className="relative aspect-video overflow-hidden border-b border-slate-200/80 bg-[var(--page)]">
-                  <Image
-                    src={step.image}
-                    alt={step.imageAlt}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    loading={step.number === "01" ? "eager" : "lazy"}
-                    className="object-cover"
-                  />
+                  {step.visual ? (
+                    <GuideVisual variant={step.visual} label={step.imageAlt} />
+                  ) : step.image ? (
+                    <Image
+                      src={step.image}
+                      alt={step.imageAlt}
+                      fill
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      loading={step.number === "01" ? "eager" : "lazy"}
+                      className="object-cover"
+                    />
+                  ) : null}
                 </div>
                 <div className="p-5 sm:p-6">
                   <div className="mb-4 flex items-center justify-between">
@@ -191,6 +221,81 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
           </button>
         </footer>
       </section>
+    </div>
+  );
+}
+
+function GuideVisual({
+  variant,
+  label,
+}: {
+  variant: "recommendations" | "final-plan";
+  label: string;
+}) {
+  if (variant === "recommendations") {
+    return (
+      <div
+        className="absolute inset-0 flex items-center p-5 sm:p-7"
+        role="img"
+        aria-label={label}
+      >
+        <div className="w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold text-slate-800 sm:text-sm">
+              推荐共同时间
+            </p>
+            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
+              本周安排 2 次
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {["19:00–20:00", "20:00–21:00", "21:00–22:00"].map(
+              (time, index) => (
+                <div
+                  key={time}
+                  className={`rounded-xl border px-2 py-3 ${
+                    index === 1
+                      ? "border-blue-300 bg-blue-50"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <p className="text-[9px] font-medium text-slate-500 sm:text-[10px]">
+                    9月9日 周三
+                  </p>
+                  <p className="mt-1 truncate text-[10px] font-semibold tabular-nums text-slate-900 sm:text-xs">
+                    {time}
+                  </p>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="absolute inset-0 flex items-center p-5 sm:p-7"
+      role="img"
+      aria-label={label}
+    >
+      <div className="w-full rounded-2xl border border-blue-200 bg-[#eef5fc] p-4 shadow-sm">
+        <p className="text-xs font-semibold text-blue-600">已确定时间方案</p>
+        <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+          <p className="rounded-lg bg-white/80 px-2.5 py-2 text-[10px] font-semibold text-slate-700">
+            9月9日 周三 · 19:00–20:00
+          </p>
+          <p className="rounded-lg bg-white/80 px-2.5 py-2 text-[10px] font-semibold text-slate-700">
+            9月12日 周六 · 14:00–15:00
+          </p>
+        </div>
+        <div className="mt-3 flex justify-end">
+          <span className="rounded-lg bg-[var(--accent)] px-3 py-2 text-[10px] font-semibold text-white">
+            分享全部安排
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
