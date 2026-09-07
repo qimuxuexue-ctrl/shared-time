@@ -5,7 +5,6 @@ import {
   CheckCircleIcon,
   ClockIcon,
   CursorClickIcon,
-  NotePencilIcon,
   ShareNetworkIcon,
   UserCircleIcon,
   XIcon,
@@ -47,10 +46,10 @@ const steps: Array<{
   },
   {
     number: "03",
-    title: "把自己的空闲时间标上去",
+    title: "标记空闲时间，补充备注",
     description: (
       <>
-        点击 10:00-24:00 的格子，可以添加或移除自己的 Tag。点击星期标题还能快速选择整段时间；已经过去的时间会自动锁定。
+        点击时间格添加或移除自己的 Tag，点击星期标题可快速选择整段时间。需要说明课程、会议号等信息时，可以在备注区补充。
       </>
     ),
     image: "/guide/03-workspace.png",
@@ -59,15 +58,15 @@ const steps: Array<{
   },
   {
     number: "04",
-    title: "看重合时间，也可以留备注",
+    title: "选择共同时间并分享",
     description: (
       <>
-        同一格里出现的 Tag 越多，说明这个时间越适合大家。点击参与者栏中自己的 Tag，可以修改名称和颜色；共享备注也只能修改自己写的内容。
+        系统会按空闲人数推荐时间。创建者可以设置本周安排次数和每次时长，也可以自选时间；统一确认后，可将全部安排和补充说明生成图片分享。
       </>
     ),
     image: "/guide/03-workspace.png",
-    imageAlt: "Share timeline 参与者、共享备注和多人空闲时间",
-    icon: <NotePencilIcon size={19} weight="duotone" />,
+    imageAlt: "Share timeline 推荐共同时间、确认安排与分享功能",
+    icon: <CheckCircleIcon size={19} weight="duotone" />,
   },
 ];
 
@@ -180,8 +179,8 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
             />
             <GuideTip
               icon={<CheckCircleIcon size={18} weight="duotone" />}
-              title="删除规则"
-              body="只有创建者能删除事件，不会删除参与者的 ID 或其他事件。"
+              title="确认与分享"
+              body="创建者确认后，可生成包含多段时间和说明的结果图片。"
             />
           </section>
         </div>
