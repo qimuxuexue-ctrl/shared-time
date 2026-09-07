@@ -1751,6 +1751,17 @@ export function EventWorkspace({ code }: { code: string }) {
                         >
                           {note.authorTagName}
                         </span>
+                        {note.isCurrent ? (
+                          <button
+                            type="button"
+                            className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                            aria-label="删除我的备注"
+                            title="删除备注"
+                            onClick={() => { setDeleteNoteError(""); setDeletingNote(true); }}
+                          >
+                            <TrashIcon size={14} weight="bold" />
+                          </button>
+                        ) : null}
                       </div>
                       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
                         {note.content}
@@ -1766,7 +1777,6 @@ export function EventWorkspace({ code }: { code: string }) {
                           )}
                         </time>
                         {note.isCurrent ? (
-                          <div className="flex flex-wrap justify-end gap-1">
                           <button
                             type="button"
                             className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-[var(--accent)]"
@@ -1775,15 +1785,6 @@ export function EventWorkspace({ code }: { code: string }) {
                             <PencilSimpleIcon size={13} weight="bold" />
                             修改
                           </button>
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-red-50 hover:text-red-600"
-                            onClick={() => { setDeleteNoteError(""); setDeletingNote(true); }}
-                          >
-                            <TrashIcon size={13} weight="bold" />
-                            删除
-                          </button>
-                          </div>
                         ) : null}
                       </div>
                     </article>
