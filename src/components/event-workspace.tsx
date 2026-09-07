@@ -144,6 +144,14 @@ function normalizeFinalPeriods(periods: EventFinalPeriod[]) {
   return normalized;
 }
 
+function isSamePeriod(first: EventFinalPeriod, second: EventFinalPeriod) {
+  return (
+    first.date === second.date &&
+    first.startHour === second.startHour &&
+    first.endHour === second.endHour
+  );
+}
+
 function getPeriodMembers(
   period: EventFinalPeriod,
   members: EventMember[],
@@ -430,8 +438,11 @@ export function EventWorkspace({ code }: { code: string }) {
   const [recommendationFilter, setRecommendationFilter] =
     useState<RecommendationFilter>("recommended");
   const [recommendationDuration, setRecommendationDuration] = useState<1 | 2 | 3>(1);
+  const [weeklyOccurrenceCount, setWeeklyOccurrenceCount] = useState(1);
+  const [occurrenceSelections, setOccurrenceSelections] = useState<
+    Array<EventFinalPeriod | null>
+  >([null]);
   const [finalPlanSeed, setFinalPlanSeed] = useState<EventFinalPeriod[] | null>(null);
-  const [pendingPeriods, setPendingPeriods] = useState<EventFinalPeriod[]>([]);
   const [finalSaving, setFinalSaving] = useState(false);
   const [finalPlanError, setFinalPlanError] = useState("");
   const [showCancelFinalConfirm, setShowCancelFinalConfirm] = useState(false);
@@ -440,15 +451,10 @@ export function EventWorkspace({ code }: { code: string }) {
   const [finalNoteError, setFinalNoteError] = useState("");
   const [sharingImage, setSharingImage] = useState(false);
   const [shareFeedback, setShareFeedback] = useState("");
-  const [canScrollRecommendationsLeft, setCanScrollRecommendationsLeft] =
-    useState(false);
-  const [canScrollRecommendationsRight, setCanScrollRecommendationsRight] =
-    useState(false);
   const dataRef = useRef<EventWorkspaceData | null>(null);
   const savedAvailabilityRef = useRef<AvailabilitySlot[]>([]);
   const pendingUpdatesRef = useRef(new Map<string, SlotUpdate>());
   const saveTimerRef = useRef<number | null>(null);
-  const recommendationScrollRef = useRef<HTMLDivElement | null>(null);
   const saveInFlightRef = useRef(false);
   const flushPendingUpdatesRef = useRef<() => Promise<void>>(async () => {});
 
@@ -629,39 +635,30 @@ export function EventWorkspace({ code }: { code: string }) {
     return filtered.slice(0, 12);
   }, [data, rankedSlots, recommendationFilter]);
 
-  const updateRecommendationNavigation = useCallback(() => {
-    const scroller = recommendationScrollRef.current;
-    if (!scroller) return;
-    setCanScrollRecommendationsLeft(scroller.scrollLeft > 4);
-    setCanScrollRecommendationsRight(
-      scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4,
+  const pendingPeriods = occurrenceSelections.filter(
+    (period): period is EventFinalPeriod => period !== null,
+  );
+
+  const changeWeeklyOccurrenceCount = (nextCount: number) => {
+    setWeeklyOccurrenceCount(nextCount);
+    setOccurrenceSelections((current) =>
+      Array.from({ length: nextCount }, (_, index) => current[index] ?? null),
     );
-  }, []);
+  };
 
-  useEffect(() => {
-    const scroller = recommendationScrollRef.current;
-    if (!scroller) return;
-
-    scroller.scrollTo({ left: 0 });
-    updateRecommendationNavigation();
-    scroller.addEventListener("scroll", updateRecommendationNavigation, {
-      passive: true,
-    });
-    window.addEventListener("resize", updateRecommendationNavigation);
-
-    return () => {
-      scroller.removeEventListener("scroll", updateRecommendationNavigation);
-      window.removeEventListener("resize", updateRecommendationNavigation);
-    };
-  }, [recommendationFilter, updateRecommendationNavigation, visibleRecommendations]);
-
-  const scrollRecommendations = (direction: -1 | 1) => {
-    const scroller = recommendationScrollRef.current;
-    if (!scroller) return;
-    scroller.scrollBy({
-      left: direction * scroller.clientWidth,
-      behavior: "smooth",
-    });
+  const selectOccurrencePeriod = (
+    occurrenceIndex: number,
+    period: EventFinalPeriod,
+  ) => {
+    setOccurrenceSelections((current) =>
+      current.map((selected, index) =>
+        index === occurrenceIndex
+          ? selected && isSamePeriod(selected, period)
+            ? null
+            : period
+          : selected,
+      ),
+    );
   };
 
   const openFinalPlan = (periods: EventFinalPeriod[]) => {
@@ -1048,7 +1045,7 @@ export function EventWorkspace({ code }: { code: string }) {
         return next;
       });
       setFinalPlanSeed(null);
-      setPendingPeriods([]);
+      setOccurrenceSelections(Array.from({ length: weeklyOccurrenceCount }, () => null));
     } catch (caught) {
       setFinalPlanError(
         caught instanceof Error ? caught.message : "保存时间方案失败",
@@ -1386,7 +1383,7 @@ export function EventWorkspace({ code }: { code: string }) {
         {error ? <p className="form-error mb-5">{error}</p> : null}
 
         {data.event.finalPeriods.length > 0 ? (
-          <section className="mb-5 rounded-[20px] border border-blue-200/80 bg-[#eef5fc] p-5 shadow-[0_12px_36px_rgba(52,120,246,0.08)] sm:flex sm:items-center sm:justify-between sm:gap-6">
+          <section className="mb-5 rounded-[20px] border border-blue-200/80 bg-[#eef5fc] p-5 shadow-[0_12px_36px_rgba(52,120,246,0.08)]">
             <div className="min-w-0">
               <p className="flex items-center gap-2 text-sm font-semibold text-blue-600">
                 <CheckCircleIcon size={18} weight="fill" />
@@ -1441,7 +1438,7 @@ export function EventWorkspace({ code }: { code: string }) {
                 </div>
               ) : null}
             </div>
-            <div className="mt-5 flex shrink-0 flex-wrap gap-2 sm:mt-0 sm:justify-end">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-blue-100 pt-4">
               {data.event.isCreator ? (
                 <button
                   type="button"
@@ -1465,15 +1462,6 @@ export function EventWorkspace({ code }: { code: string }) {
                   {data.event.finalNote ? "修改说明" : "补充说明"}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => void shareResultImage()}
-                disabled={sharingImage}
-              >
-                <ShareNetworkIcon size={18} weight="bold" />
-                {sharingImage ? "正在生成" : "分享结果图"}
-              </button>
               {data.event.isCreator ? (
                 <button
                   type="button"
@@ -1483,6 +1471,15 @@ export function EventWorkspace({ code }: { code: string }) {
                   取消全部时间
                 </button>
               ) : null}
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => void shareResultImage()}
+                disabled={sharingImage}
+              >
+                <ShareNetworkIcon size={18} weight="bold" />
+                {sharingImage ? "正在生成" : "分享全部安排"}
+              </button>
               {shareFeedback ? (
                 <p className="w-full text-xs leading-5 text-slate-500 sm:text-right">
                   {shareFeedback}
@@ -1495,11 +1492,30 @@ export function EventWorkspace({ code }: { code: string }) {
         <section className="mb-5 rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_12px_36px_rgba(67,83,108,0.05)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-950">
-                推荐共同时间
-              </h2>
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-lg font-semibold tracking-tight text-slate-950">
+                  推荐共同时间
+                </h2>
+                {data.event.isCreator ? (
+                  <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">
+                    本周安排
+                    <select
+                      aria-label="本周安排次数"
+                      className="bg-transparent font-semibold text-slate-800 outline-none"
+                      value={weeklyOccurrenceCount}
+                      onChange={(event) => changeWeeklyOccurrenceCount(Number(event.target.value))}
+                    >
+                      {[1, 2, 3, 4, 5].map((count) => (
+                        <option key={count} value={count}>
+                          {count} 次
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                可选择一周内多个时间段，选好后统一确认安排。
+                为每次安排选择一个时间，全部选好后统一确认。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1507,7 +1523,10 @@ export function EventWorkspace({ code }: { code: string }) {
                 时长
                 <select className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
                   value={recommendationDuration}
-                  onChange={(event) => setRecommendationDuration(Number(event.target.value) as 1 | 2 | 3)}>
+                  onChange={(event) => {
+                    setRecommendationDuration(Number(event.target.value) as 1 | 2 | 3);
+                    setOccurrenceSelections(Array.from({ length: weeklyOccurrenceCount }, () => null));
+                  }}>
                   <option value={1}>1 小时</option>
                   <option value={2}>2 小时</option>
                   <option value={3}>3 小时</option>
@@ -1527,119 +1546,51 @@ export function EventWorkspace({ code }: { code: string }) {
                   onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
                 >
                   <PlusIcon size={15} weight="bold" />
-                  自选时间段
+                  自选或调整
                 </button>
               ) : null}
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  className="icon-button size-9 disabled:opacity-30"
-                  onClick={() => scrollRecommendations(-1)}
-                  disabled={!canScrollRecommendationsLeft}
-                  aria-label="上一组推荐时间"
-                >
-                  <CaretLeftIcon size={16} weight="bold" />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button size-9 disabled:opacity-30"
-                  onClick={() => scrollRecommendations(1)}
-                  disabled={!canScrollRecommendationsRight}
-                  aria-label="下一组推荐时间"
-                >
-                  <CaretRightIcon size={16} weight="bold" />
-                </button>
-              </div>
             </div>
           </div>
 
-          {pendingPeriods.length > 0 && data.event.isCreator ? (
+          {data.event.isCreator ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-slate-600">
-              <span aria-live="polite">已选 {pendingPeriods.length} 个时间段 · 尚未确认</span>
+              <span aria-live="polite">
+                已选择 {pendingPeriods.length}/{weeklyOccurrenceCount} 次安排
+                {pendingPeriods.length === weeklyOccurrenceCount
+                  ? " · 可以统一确认"
+                  : ` · 还需选择 ${weeklyOccurrenceCount - pendingPeriods.length} 次`}
+              </span>
               <div className="flex items-center gap-3">
-                <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => setPendingPeriods([])}>清空选择</button>
-                <button type="button" className="text-sm font-semibold text-blue-600" onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}>查看并确认</button>
+                {pendingPeriods.length > 0 ? (
+                  <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => setOccurrenceSelections(Array.from({ length: weeklyOccurrenceCount }, () => null))}>清空选择</button>
+                ) : null}
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-blue-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                  disabled={pendingPeriods.length !== weeklyOccurrenceCount}
+                  onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
+                >
+                  统一确认安排
+                </button>
               </div>
             </div>
           ) : null}
 
           {visibleRecommendations.length > 0 ? (
-            <div
-              ref={recommendationScrollRef}
-              className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              {visibleRecommendations.map((slot, index) => {
-                const isBest =
-                  recommendationFilter === "recommended" && index === 0;
-                const isFinal = data.event.finalPeriods.some(
-                  (period) =>
-                    period.date === slot.date &&
-                    period.startHour === slot.startHour &&
-                    period.endHour === slot.endHour,
-                );
-                const isPending = pendingPeriods.some((period) =>
-                  period.date === slot.date && period.startHour === slot.startHour && period.endHour === slot.endHour,
-                );
-                return (
-                  <article
-                    key={slotKey(slot.date, slot.startHour)}
-                    className={`min-w-0 shrink-0 basis-full snap-start rounded-2xl border p-4 sm:basis-[calc(50%-0.375rem)] xl:basis-[calc((100%-1.5rem)/3)] ${
-                      isFinal
-                        ? "border-blue-300 bg-blue-50/70"
-                        : "border-slate-200 bg-slate-50/65"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">
-                          {formatFinalDate(slot.date)}
-                        </p>
-                        <p className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
-                          {formatFinalTimeRange(slot.startHour, slot.endHour)}
-                        </p>
-                      </div>
-                      <span className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-600 shadow-sm">
-                        {slot.members.length}/{data.members.length} 人
-                      </span>
-                    </div>
-                    <div className="mt-3 flex min-h-6 flex-wrap gap-1.5">
-                      {slot.members.slice(0, 4).map((member) => (
-                        <span
-                          key={member.id}
-                          className="max-w-24 truncate rounded-md bg-white px-2 py-1 text-[11px] font-semibold"
-                          style={{ color: member.tagColor }}
-                        >
-                          {member.tagName}
-                        </span>
-                      ))}
-                      {slot.members.length > 4 ? (
-                        <span className="px-1 py-1 text-[11px] font-semibold text-slate-400">
-                          +{slot.members.length - 4}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium text-slate-400">
-                        {isFinal ? "已加入安排" : isBest ? "当前最优" : "候选时间"}
-                      </span>
-                      {data.event.isCreator && !isFinal ? (
-                        <button
-                          type="button"
-                          className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#2469df] active:scale-[0.98]"
-                          aria-pressed={isPending}
-                          onClick={() => setPendingPeriods((current) =>
-                            isPending
-                              ? current.filter((period) => !(period.date === slot.date && period.startHour === slot.startHour && period.endHour === slot.endHour))
-                              : [...current, { date: slot.date, startHour: slot.startHour, endHour: slot.endHour }],
-                          )}
-                        >
-                          {isPending ? "已选择 · 取消" : "选择此时间"}
-                        </button>
-                      ) : null}
-                    </div>
-                  </article>
-                );
-              })}
+            <div className="mt-4 divide-y divide-slate-100">
+              {Array.from({ length: data.event.isCreator ? weeklyOccurrenceCount : 1 }, (_, occurrenceIndex) => (
+                <RecommendationLane
+                  key={occurrenceIndex}
+                  occurrenceIndex={occurrenceIndex}
+                  recommendations={visibleRecommendations}
+                  recommendationFilter={recommendationFilter}
+                  memberCount={data.members.length}
+                  finalPeriods={data.event.finalPeriods}
+                  selections={occurrenceSelections}
+                  canSelect={data.event.isCreator}
+                  onSelect={(period) => selectOccurrencePeriod(occurrenceIndex, period)}
+                />
+              ))}
             </div>
           ) : (
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
@@ -2063,6 +2014,196 @@ export function EventWorkspace({ code }: { code: string }) {
         />
       ) : null}
     </main>
+  );
+}
+
+function RecommendationLane({
+  occurrenceIndex,
+  recommendations,
+  recommendationFilter,
+  memberCount,
+  finalPeriods,
+  selections,
+  canSelect,
+  onSelect,
+}: {
+  occurrenceIndex: number;
+  recommendations: CandidateSlot[];
+  recommendationFilter: RecommendationFilter;
+  memberCount: number;
+  finalPeriods: EventFinalPeriod[];
+  selections: Array<EventFinalPeriod | null>;
+  canSelect: boolean;
+  onSelect: (period: EventFinalPeriod) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const selectedPeriod = selections[occurrenceIndex] ?? null;
+
+  const updateNavigation = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    setCanScrollLeft(scroller.scrollLeft > 4);
+    setCanScrollRight(
+      scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4,
+    );
+  }, []);
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTo({ left: 0 });
+    updateNavigation();
+    scroller.addEventListener("scroll", updateNavigation, { passive: true });
+    window.addEventListener("resize", updateNavigation);
+    return () => {
+      scroller.removeEventListener("scroll", updateNavigation);
+      window.removeEventListener("resize", updateNavigation);
+    };
+  }, [recommendationFilter, recommendations, updateNavigation]);
+
+  const scroll = (direction: -1 | 1) => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    scroller.scrollBy({
+      left: direction * scroller.clientWidth,
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <section className="py-4 first:pt-0 last:pb-0">
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {canSelect ? (
+            <span className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+              第 {occurrenceIndex + 1} 次
+            </span>
+          ) : null}
+          <p className="truncate text-xs text-slate-500">
+            {selectedPeriod
+              ? `${formatFinalDate(selectedPeriod.date)} ${formatFinalTimeRange(selectedPeriod.startHour, selectedPeriod.endHour)}`
+              : canSelect
+                ? "请选择一个时间"
+                : "按空闲人数与时间排序"}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          <button
+            type="button"
+            className="icon-button size-8 disabled:opacity-30"
+            onClick={() => scroll(-1)}
+            disabled={!canScrollLeft}
+            aria-label={`查看第 ${occurrenceIndex + 1} 次的上一组推荐时间`}
+          >
+            <CaretLeftIcon size={15} weight="bold" />
+          </button>
+          <button
+            type="button"
+            className="icon-button size-8 disabled:opacity-30"
+            onClick={() => scroll(1)}
+            disabled={!canScrollRight}
+            aria-label={`查看第 ${occurrenceIndex + 1} 次的下一组推荐时间`}
+          >
+            <CaretRightIcon size={15} weight="bold" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {recommendations.map((slot, index) => {
+          const period = {
+            date: slot.date,
+            startHour: slot.startHour,
+            endHour: slot.endHour,
+          };
+          const isBest = recommendationFilter === "recommended" && index === 0;
+          const isFinal = finalPeriods.some((item) => isSamePeriod(item, period));
+          const isSelected = selectedPeriod
+            ? isSamePeriod(selectedPeriod, period)
+            : false;
+          const usedByOtherOccurrence = selections.some(
+            (item, selectionIndex) =>
+              selectionIndex !== occurrenceIndex &&
+              item !== null &&
+              isSamePeriod(item, period),
+          );
+
+          return (
+            <article
+              key={slotKey(slot.date, slot.startHour)}
+              className={`min-w-0 shrink-0 basis-full snap-start rounded-2xl border p-4 transition sm:basis-[calc(50%-0.375rem)] xl:basis-[calc((100%-1.5rem)/3)] ${
+                isSelected
+                  ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
+                  : isFinal
+                    ? "border-blue-300 bg-blue-50/70"
+                    : "border-slate-200 bg-slate-50/65"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {formatFinalDate(slot.date)}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+                    {formatFinalTimeRange(slot.startHour, slot.endHour)}
+                  </p>
+                </div>
+                <span className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-600 shadow-sm">
+                  {slot.members.length}/{memberCount} 人
+                </span>
+              </div>
+              <div className="mt-3 flex min-h-6 flex-wrap gap-1.5">
+                {slot.members.slice(0, 4).map((member) => (
+                  <span
+                    key={member.id}
+                    className="max-w-24 truncate rounded-md bg-white px-2 py-1 text-[11px] font-semibold"
+                    style={{ color: member.tagColor }}
+                  >
+                    {member.tagName}
+                  </span>
+                ))}
+                {slot.members.length > 4 ? (
+                  <span className="px-1 py-1 text-[11px] font-semibold text-slate-400">
+                    +{slot.members.length - 4}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-slate-400">
+                  {isFinal
+                    ? "已加入安排"
+                    : usedByOtherOccurrence
+                      ? "已用于其他场次"
+                      : isBest
+                        ? "当前最优"
+                        : "候选时间"}
+                </span>
+                {canSelect && !isFinal ? (
+                  <button
+                    type="button"
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition active:scale-[0.98] ${
+                      isSelected
+                        ? "bg-slate-800 text-white hover:bg-slate-700"
+                        : "bg-[var(--accent)] text-white hover:bg-[#2469df] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                    }`}
+                    disabled={usedByOtherOccurrence}
+                    aria-pressed={isSelected}
+                    onClick={() => onSelect(period)}
+                  >
+                    {isSelected ? "已选择 · 取消" : "选择此时间"}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
