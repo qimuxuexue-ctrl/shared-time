@@ -80,7 +80,7 @@ function formatNotificationTime(value: string) {
 function formatFinalTimeSummary(finalTime: EventSummary["finalTime"]) {
   if (!finalTime) return "";
   const [, month, day] = finalTime.date.split("-").map(Number);
-  return `${month}/${day} ${String(finalTime.startHour).padStart(2, "0")}:00 已确定`;
+  return `${month}/${day} ${String(finalTime.startHour).padStart(2, "0")}:00 已安排`;
 }
 
 export function HomeApp() {

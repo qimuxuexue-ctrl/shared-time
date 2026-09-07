@@ -359,7 +359,7 @@ async function createResultImage(
 
   context.fillStyle = "#94a3b8";
   context.font = '500 28px "Microsoft YaHei", "PingFang SC", sans-serif';
-  context.fillText("时间方案由事件创建者确认", 116, footerY);
+  context.fillText("时间安排由参与者共同维护", 116, footerY);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -1101,8 +1101,7 @@ export function EventWorkspace({ code }: { code: string }) {
     if (
       !identity ||
       !data ||
-      data.event.finalPeriods.length === 0 ||
-      !data.event.isCreator
+      data.event.finalPeriods.length === 0
     ) return;
     setFinalNoteSaving(true);
     setFinalNoteError("");
@@ -1430,7 +1429,7 @@ export function EventWorkspace({ code }: { code: string }) {
             <div className="min-w-0">
               <p className="flex items-center gap-2 text-sm font-semibold text-blue-600">
                 <CheckCircleIcon size={18} weight="fill" />
-                已确定时间方案
+                当前时间安排
               </p>
               <p className="mt-1 text-sm text-slate-600">
                 {getEventTimeZoneLabel(data.event.timeZone)} · 共 {data.event.finalPeriods.length} 个时间段
@@ -1482,38 +1481,32 @@ export function EventWorkspace({ code }: { code: string }) {
               ) : null}
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-blue-100 pt-4">
-              {data.event.isCreator ? (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
-                >
-                  <PencilSimpleIcon size={18} weight="bold" />
-                  修改时间
-                </button>
-              ) : null}
-              {data.event.isCreator ? (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => {
-                    setFinalNoteError("");
-                    setEditingFinalNote(true);
-                  }}
-                >
-                  <NotePencilIcon size={18} weight="bold" />
-                  {data.event.finalNote ? "修改说明" : "补充说明"}
-                </button>
-              ) : null}
-              {data.event.isCreator ? (
-                <button
-                  type="button"
-                  className="secondary-button text-red-600 hover:border-red-200 hover:bg-red-50"
-                  onClick={() => setShowCancelFinalConfirm(true)}
-                >
-                  取消全部时间
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
+              >
+                <PencilSimpleIcon size={18} weight="bold" />
+                修改安排
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setFinalNoteError("");
+                  setEditingFinalNote(true);
+                }}
+              >
+                <NotePencilIcon size={18} weight="bold" />
+                {data.event.finalNote ? "修改说明" : "补充说明"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button text-red-600 hover:border-red-200 hover:bg-red-50"
+                onClick={() => setShowCancelFinalConfirm(true)}
+              >
+                取消当前安排
+              </button>
               <button
                 type="button"
                 className="primary-button"
@@ -1539,23 +1532,21 @@ export function EventWorkspace({ code }: { code: string }) {
                 <h2 className="text-lg font-semibold tracking-tight text-slate-950">
                   推荐共同时间
                 </h2>
-                {data.event.isCreator ? (
-                  <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">
-                    本周安排
-                    <select
-                      aria-label="本周安排次数"
-                      className="bg-transparent font-semibold text-slate-800 outline-none"
-                      value={weeklyOccurrenceCount}
-                      onChange={(event) => changeWeeklyOccurrenceCount(Number(event.target.value))}
-                    >
-                      {[1, 2, 3, 4, 5].map((count) => (
-                        <option key={count} value={count}>
-                          {count} 次
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
+                <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500">
+                  本周安排
+                  <select
+                    aria-label="本周安排次数"
+                    className="bg-transparent font-semibold text-slate-800 outline-none"
+                    value={weeklyOccurrenceCount}
+                    onChange={(event) => changeWeeklyOccurrenceCount(Number(event.target.value))}
+                  >
+                    {[1, 2, 3, 4, 5].map((count) => (
+                      <option key={count} value={count}>
+                        {count} 次
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 为每次安排选择一个时间，全部选好后统一确认。
@@ -1582,21 +1573,18 @@ export function EventWorkspace({ code }: { code: string }) {
                 <option value="everyone">全员有空</option>
                 <option value="two" disabled={data.members.length < 2}>至少 2 人</option>
               </select>
-              {data.event.isCreator ? (
-                <button
-                  type="button"
-                  className="secondary-button min-h-9 px-3 py-2 text-xs"
-                  onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
-                >
-                  <PlusIcon size={15} weight="bold" />
-                  自选或调整
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="secondary-button min-h-9 px-3 py-2 text-xs"
+                onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
+              >
+                <PlusIcon size={15} weight="bold" />
+                自选或调整
+              </button>
             </div>
           </div>
 
-          {data.event.isCreator ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-slate-600">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-slate-600">
               <span aria-live="polite">
                 已选择 {pendingPeriods.length}/{weeklyOccurrenceCount} 次安排
                 {pendingPeriods.length === weeklyOccurrenceCount
@@ -1616,12 +1604,11 @@ export function EventWorkspace({ code }: { code: string }) {
                   统一确认安排
                 </button>
               </div>
-            </div>
-          ) : null}
+          </div>
 
           {visibleRecommendations.length > 0 ? (
             <div className="mt-4 divide-y divide-slate-100">
-              {Array.from({ length: data.event.isCreator ? weeklyOccurrenceCount : 1 }, (_, occurrenceIndex) => (
+              {Array.from({ length: weeklyOccurrenceCount }, (_, occurrenceIndex) => (
                 <RecommendationLane
                   key={occurrenceIndex}
                   occurrenceIndex={occurrenceIndex}
@@ -1630,7 +1617,7 @@ export function EventWorkspace({ code }: { code: string }) {
                   memberCount={data.members.length}
                   finalPeriods={data.event.finalPeriods}
                   selections={occurrenceSelections}
-                  canSelect={data.event.isCreator}
+                  canSelect
                   onSelect={(period) => selectOccurrencePeriod(occurrenceIndex, period)}
                 />
               ))}
@@ -1833,7 +1820,7 @@ export function EventWorkspace({ code }: { code: string }) {
                 <span>浅 → 深</span>
                 <span className="ml-1 flex items-center gap-1.5">
                   <span className="size-3 rounded-sm border border-amber-400 bg-amber-50" />
-                  已确定时间
+                  当前安排
                 </span>
               </div>
             </div>
@@ -1910,7 +1897,7 @@ export function EventWorkspace({ code }: { code: string }) {
                                     data.members.length,
                                   ),
                           }}
-                          aria-label={`${date} ${hour}:00 至 ${hour + 1}:00，${slotMembers.length}/${data.members.length} 人有空${isFinal ? "，已加入时间方案" : ""}`}
+                          aria-label={`${date} ${hour}:00 至 ${hour + 1}:00，${slotMembers.length}/${data.members.length} 人有空${isFinal ? "，当前安排时间" : ""}`}
                         >
                           <div className="flex flex-wrap content-start gap-1.5">
                             {slotMembers.map((member) => (
@@ -1929,7 +1916,7 @@ export function EventWorkspace({ code }: { code: string }) {
                           </div>
                           {isFinalStart ? (
                             <span className="absolute bottom-1.5 right-2 text-[10px] font-bold text-amber-700">
-                              已确定
+                              已安排
                             </span>
                           ) : null}
                         </button>
@@ -1991,13 +1978,13 @@ export function EventWorkspace({ code }: { code: string }) {
 
       {showCancelFinalConfirm ? (
         <Modal
-          title="取消整个时间方案？"
+          title="取消当前时间安排？"
           onClose={() => {
             if (!finalSaving) setShowCancelFinalConfirm(false);
           }}
         >
           <p className="text-sm leading-6 text-slate-600">
-            取消后，已填写的空闲时间不会被删除。所有参与者会收到时间方案已取消的通知。
+            取消后，大家填写的空闲时间不会被删除。其他参与者会收到时间安排已取消的通知，之后任何成员都可以重新安排。
           </p>
           <div className="mt-6 grid grid-cols-2 gap-3">
             <button
@@ -2253,7 +2240,7 @@ function RecommendationLane({
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="text-xs font-medium text-slate-400">
                   {isFinal
-                    ? "已加入安排"
+                    ? "当前安排"
                     : usedByOtherOccurrence
                       ? "已用于其他场次"
                       : isBest

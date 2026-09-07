@@ -56,6 +56,15 @@ async function getEvent(code: string) {
     .maybeSingle<EventRow>();
 }
 
+async function getEventMembership(eventId: string, identityId: string) {
+  return supabaseAdmin
+    .from("event_members")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("identity_id", identityId)
+    .maybeSingle<{ id: string }>();
+}
+
 export async function PATCH(
   request: Request,
   context: RouteContext<"/api/events/[code]/final-time">,
@@ -80,14 +89,16 @@ export async function PATCH(
   if (!event) {
     return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
   }
-  if (event.creator_identity_id !== parsed.data.identityId) {
-    return Response.json(
-      { error: "只有事件创建者可以修改最终安排说明" },
-      { status: 403 },
-    );
+  const { data: membership, error: membershipError } = await getEventMembership(
+    event.id,
+    parsed.data.identityId,
+  );
+  if (membershipError) return serverError();
+  if (!membership) {
+    return Response.json({ error: "你还没有加入这个事件" }, { status: 403 });
   }
   if (!event.final_date) {
-    return Response.json({ error: "请先确定时间方案" }, { status: 409 });
+    return Response.json({ error: "请先添加时间安排" }, { status: 409 });
   }
   if (event.status !== "active") {
     return Response.json({ error: "这个事件已经关闭" }, { status: 409 });
@@ -97,8 +108,7 @@ export async function PATCH(
   const { error: updateError } = await supabaseAdmin
     .from("events")
     .update({ final_note: finalNote })
-    .eq("id", event.id)
-    .eq("creator_identity_id", parsed.data.identityId);
+    .eq("id", event.id);
 
   if (updateError) {
     return serverError("保存补充说明失败，请确认数据库更新已完成");
@@ -142,11 +152,13 @@ export async function PUT(
   if (!event) {
     return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
   }
-  if (event.creator_identity_id !== parsed.data.identityId) {
-    return Response.json(
-      { error: "只有事件创建者可以确认时间方案" },
-      { status: 403 },
-    );
+  const { data: membership, error: membershipError } = await getEventMembership(
+    event.id,
+    parsed.data.identityId,
+  );
+  if (membershipError) return serverError();
+  if (!membership) {
+    return Response.json({ error: "你还没有加入这个事件" }, { status: 403 });
   }
   if (isExpiredOneTimeEvent(event)) {
     await deleteExpiredEvent(event);
@@ -176,13 +188,13 @@ export async function PUT(
       !validHours
     ) {
       return Response.json(
-        { error: "最终时间段不在事件范围内" },
+        { error: "安排时间段不在事件范围内" },
         { status: 400 },
       );
     }
     if (isPastSlot(period.date, period.startHour, event.time_zone)) {
       return Response.json(
-        { error: "不能确认已经过去的时间" },
+        { error: "不能安排已经过去的时间" },
         { status: 409 },
       );
     }
@@ -203,7 +215,7 @@ export async function PUT(
     "save_event_time_plan",
     {
       p_event_id: event.id,
-      p_identity_id: parsed.data.identityId,
+      p_identity_id: event.creator_identity_id,
       p_periods: normalizedPeriods,
     },
   );
@@ -214,7 +226,7 @@ export async function PUT(
 
   try {
     await clearOppositeNotification(event.id, "final_time_cancelled");
-    await notifyEventMembers(event, "final_time");
+    await notifyEventMembers(event, "final_time", parsed.data.identityId);
   } catch (error) {
     console.error("Unable to notify members about final time", error);
   }
@@ -246,16 +258,18 @@ export async function DELETE(
   if (!event) {
     return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
   }
-  if (event.creator_identity_id !== parsed.data.identityId) {
-    return Response.json(
-      { error: "只有事件创建者可以取消时间方案" },
-      { status: 403 },
-    );
+  const { data: membership, error: membershipError } = await getEventMembership(
+    event.id,
+    parsed.data.identityId,
+  );
+  if (membershipError) return serverError();
+  if (!membership) {
+    return Response.json({ error: "你还没有加入这个事件" }, { status: 403 });
   }
 
   const { error: cancelError } = await supabaseAdmin.rpc("save_event_time_plan", {
     p_event_id: event.id,
-    p_identity_id: parsed.data.identityId,
+    p_identity_id: event.creator_identity_id,
     p_periods: [],
   });
   if (cancelError) {
@@ -265,7 +279,11 @@ export async function DELETE(
 
   try {
     await clearOppositeNotification(event.id, "final_time");
-    await notifyEventMembers(event, "final_time_cancelled");
+    await notifyEventMembers(
+      event,
+      "final_time_cancelled",
+      parsed.data.identityId,
+    );
   } catch (error) {
     console.error("Unable to notify members about cancelled final time", error);
   }

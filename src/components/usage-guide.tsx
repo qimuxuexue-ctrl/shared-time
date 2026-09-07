@@ -75,7 +75,7 @@ const steps: Array<{
     title: "选择推荐共同时间",
     description: (
       <>
-        系统会按空闲人数推荐时间。创建者可以设置安排次数和每次时长，也可以使用“自选或调整”选择其他时间。
+        系统会按空闲人数推荐时间。任何参与者都可以设置安排次数和每次时长，也可以使用“自选或调整”选择其他时间。
       </>
     ),
     visual: "recommendations",
@@ -87,11 +87,11 @@ const steps: Array<{
     title: "确认并分享全部安排",
     description: (
       <>
-        选好各次时间后统一确认。确认结果可以连同补充说明生成一张图片，直接分享或保存。
+        选好各次时间后保存为当前安排，之后所有参与者仍可修改。安排和补充说明可以生成一张图片，直接分享或保存。
       </>
     ),
     visual: "final-plan",
-    imageAlt: "Share timeline 已确定时间方案与分享按钮",
+    imageAlt: "Share timeline 当前时间安排与分享按钮",
     icon: <ShareNetworkIcon size={19} weight="duotone" />,
   },
 ];
@@ -281,7 +281,7 @@ function GuideVisual({
       aria-label={label}
     >
       <div className="w-full rounded-2xl border border-blue-200 bg-[#eef5fc] p-4 shadow-sm">
-        <p className="text-xs font-semibold text-blue-600">已确定时间方案</p>
+        <p className="text-xs font-semibold text-blue-600">当前时间安排</p>
         <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
           <p className="rounded-lg bg-white/80 px-2.5 py-2 text-[10px] font-semibold text-slate-700">
             9月9日 周三 · 19:00–20:00
