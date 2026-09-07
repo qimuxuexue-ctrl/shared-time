@@ -57,7 +57,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 const notificationLabels: Record<HomeNotificationType, string> = {
-  participant: "有新参与者加入",
+  participant: "参与者有变动",
   note: "备注有更新",
   timeline: "有新的空闲时间",
   final_time: "时间方案已确认或更新",

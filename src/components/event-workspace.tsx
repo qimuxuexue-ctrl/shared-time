@@ -15,6 +15,7 @@ import {
   PencilSimpleIcon,
   PlusIcon,
   ShareNetworkIcon,
+  SignOutIcon,
   TrashIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react";
@@ -426,6 +427,9 @@ export function EventWorkspace({ code }: { code: string }) {
   const [openPresetDay, setOpenPresetDay] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leavingEvent, setLeavingEvent] = useState(false);
+  const [leaveEventError, setLeaveEventError] = useState("");
   const [editingNote, setEditingNote] = useState(false);
   const [deletingNote, setDeletingNote] = useState(false);
   const [deleteNoteError, setDeleteNoteError] = useState("");
@@ -1258,6 +1262,33 @@ export function EventWorkspace({ code }: { code: string }) {
     await loadWorkspace(activeIdentity, weekStart);
   };
 
+  const leaveEvent = async () => {
+    if (!identity || !data || data.event.isCreator) return;
+    setLeavingEvent(true);
+    setLeaveEventError("");
+
+    try {
+      const response = await fetch(`/api/events/${code}/member`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id }),
+      });
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "退出事件失败，请稍后重试");
+      }
+
+      router.replace("/");
+      router.refresh();
+    } catch (caught) {
+      setLeaveEventError(
+        caught instanceof Error ? caught.message : "退出事件失败，请稍后重试",
+      );
+      setLeavingEvent(false);
+    }
+  };
+
   if (missingIdentity || joinRequired) {
     return (
       <SharedLinkEntry
@@ -1304,7 +1335,19 @@ export function EventWorkspace({ code }: { code: string }) {
                 <TrashIcon size={18} weight="bold" />
                 <span className="hidden sm:inline">删除事件</span>
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                className="secondary-button text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                onClick={() => {
+                  setLeaveEventError("");
+                  setShowLeaveConfirm(true);
+                }}
+              >
+                <SignOutIcon size={18} weight="bold" />
+                <span className="hidden sm:inline">退出事件</span>
+              </button>
+            )}
             <button
               type="button"
               className="secondary-button"
@@ -1998,6 +2041,40 @@ export function EventWorkspace({ code }: { code: string }) {
           onClose={() => setShowDeleteConfirm(false)}
           onDeleted={() => router.replace("/")}
         />
+      ) : null}
+
+      {showLeaveConfirm && identity && !data.event.isCreator ? (
+        <Modal
+          title="退出这个事件？"
+          onClose={() => {
+            if (leavingEvent) return;
+            setShowLeaveConfirm(false);
+            setLeaveEventError("");
+          }}
+        >
+          <p className="text-sm leading-6 text-slate-600">
+            退出后，你在该事件中的 Tag、空闲时间和备注都会被删除。你的 ID 和其他事件不会受到影响；之后仍可通过邀请码重新加入。
+          </p>
+          {leaveEventError ? <p className="form-error mt-4">{leaveEventError}</p> : null}
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              className="secondary-button justify-center"
+              disabled={leavingEvent}
+              onClick={() => setShowLeaveConfirm(false)}
+            >
+              继续参与
+            </button>
+            <button
+              type="button"
+              className="flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+              disabled={leavingEvent}
+              onClick={() => void leaveEvent()}
+            >
+              {leavingEvent ? "正在退出" : "确认退出"}
+            </button>
+          </div>
+        </Modal>
       ) : null}
 
       {editingMember && ownMember ? (
