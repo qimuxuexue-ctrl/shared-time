@@ -274,3 +274,53 @@ grant all on table public.event_members to service_role;
 grant all on table public.availabilities to service_role;
 grant all on table public.event_notes to service_role;
 grant all on table public.identity_notifications to service_role;
+
+-- Lock the event and replace the entire plan in one transaction.
+-- An empty array cancels the plan and clears its note.
+create or replace function public.save_event_time_plan(
+  p_event_id uuid, p_identity_id uuid, p_periods jsonb
+) returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_event public.events%rowtype;
+  v_first public.event_final_periods%rowtype;
+  v_periods jsonb;
+  v_now timestamptz := now();
+begin
+  select * into v_event from public.events where id = p_event_id for update;
+  if not found or v_event.creator_identity_id <> p_identity_id then
+    raise exception 'Event creator required';
+  end if;
+  if jsonb_typeof(p_periods) is distinct from 'array'
+    or jsonb_array_length(p_periods) > 20 then
+    raise exception 'Invalid time plan';
+  end if;
+  delete from public.event_final_periods where event_id = p_event_id;
+  insert into public.event_final_periods (event_id, slot_date, start_hour, end_hour)
+  select p_event_id, x.date, x."startHour", x."endHour"
+  from jsonb_to_recordset(p_periods) as x(date date, "startHour" smallint, "endHour" smallint);
+
+  select * into v_first from public.event_final_periods
+  where event_id = p_event_id order by slot_date, start_hour limit 1;
+  update public.events set
+    final_date = v_first.slot_date,
+    final_start_hour = v_first.start_hour,
+    finalized_at = case when v_first.id is null then null else v_now end,
+    final_note = case when v_first.id is null then null else final_note end
+  where id = p_event_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', id, 'date', slot_date, 'startHour', start_hour, 'endHour', end_hour
+  ) order by slot_date, start_hour), '[]'::jsonb) into v_periods
+  from public.event_final_periods where event_id = p_event_id;
+  return jsonb_build_object('finalPeriods', v_periods, 'finalTime',
+    case when v_first.id is null then null else jsonb_build_object(
+      'date', v_first.slot_date, 'startHour', v_first.start_hour, 'finalizedAt', v_now
+    ) end);
+end;
+$$;
+revoke all on function public.save_event_time_plan(uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.save_event_time_plan(uuid, uuid, jsonb) to service_role;

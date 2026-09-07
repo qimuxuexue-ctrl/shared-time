@@ -199,45 +199,17 @@ export async function PUT(
     }
   }
 
-  const finalizedAt = new Date().toISOString();
-  const { error: deletePeriodsError } = await supabaseAdmin
-    .from("event_final_periods")
-    .delete()
-    .eq("event_id", event.id);
-
-  if (deletePeriodsError) {
-    return serverError("保存时间方案失败，请确认数据库更新已完成");
-  }
-
-  const { data: savedPeriods, error: insertPeriodsError } = await supabaseAdmin
-    .from("event_final_periods")
-    .insert(
-      normalizedPeriods.map((period) => ({
-        event_id: event.id,
-        slot_date: period.date,
-        start_hour: period.startHour,
-        end_hour: period.endHour,
-      })),
-    )
-    .select("id, slot_date, start_hour, end_hour");
-
-  if (insertPeriodsError || !savedPeriods) {
-    return serverError("保存时间方案失败，请稍后重试");
-  }
-
-  const firstPeriod = normalizedPeriods[0];
-  const { error: updateError } = await supabaseAdmin
-    .from("events")
-    .update({
-      final_date: firstPeriod.date,
-      final_start_hour: firstPeriod.startHour,
-      finalized_at: finalizedAt,
-    })
-    .eq("id", event.id)
-    .eq("creator_identity_id", parsed.data.identityId);
-
-  if (updateError) {
-    return serverError("保存时间方案失败，请稍后重试");
+  const { data: savedPlan, error: saveError } = await supabaseAdmin.rpc(
+    "save_event_time_plan",
+    {
+      p_event_id: event.id,
+      p_identity_id: parsed.data.identityId,
+      p_periods: normalizedPeriods,
+    },
+  );
+  if (saveError || !savedPlan) {
+    console.error("Unable to save time plan", saveError);
+    return serverError("暂时无法保存时间方案，请稍后重试");
   }
 
   try {
@@ -247,25 +219,7 @@ export async function PUT(
     console.error("Unable to notify members about final time", error);
   }
 
-  return Response.json({
-    finalTime: {
-      date: firstPeriod.date,
-      startHour: firstPeriod.startHour,
-      finalizedAt,
-    },
-    finalPeriods: savedPeriods
-      .map((period) => ({
-        id: period.id,
-        date: period.slot_date,
-        startHour: period.start_hour,
-        endHour: period.end_hour,
-      }))
-      .sort(
-        (first, second) =>
-          first.date.localeCompare(second.date) ||
-          first.startHour - second.startHour,
-      ),
-  });
+  return Response.json(savedPlan);
 }
 
 export async function DELETE(
@@ -299,30 +253,15 @@ export async function DELETE(
     );
   }
 
-  const { error: updateError } = await supabaseAdmin
-    .from("events")
-    .update({
-      final_date: null,
-      final_start_hour: null,
-      finalized_at: null,
-    })
-    .eq("id", event.id)
-    .eq("creator_identity_id", parsed.data.identityId);
-
-  if (updateError) {
+  const { error: cancelError } = await supabaseAdmin.rpc("save_event_time_plan", {
+    p_event_id: event.id,
+    p_identity_id: parsed.data.identityId,
+    p_periods: [],
+  });
+  if (cancelError) {
+    console.error("Unable to cancel time plan", cancelError);
     return serverError("取消时间方案失败，请稍后重试");
   }
-
-  await supabaseAdmin
-    .from("event_final_periods")
-    .delete()
-    .eq("event_id", event.id);
-
-  await supabaseAdmin
-    .from("events")
-    .update({ final_note: null })
-    .eq("id", event.id)
-    .eq("creator_identity_id", parsed.data.identityId);
 
   try {
     await clearOppositeNotification(event.id, "final_time");

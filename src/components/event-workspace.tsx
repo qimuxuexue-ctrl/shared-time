@@ -419,6 +419,8 @@ export function EventWorkspace({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
+  const [deletingNote, setDeletingNote] = useState(false);
+  const [deleteNoteError, setDeleteNoteError] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
@@ -849,6 +851,34 @@ export function EventWorkspace({ code }: { code: string }) {
     setNoteDraft(ownNote?.content ?? "");
     setNoteError("");
     setEditingNote(true);
+  };
+
+  const deleteNote = async () => {
+    if (!identity) return;
+    setNoteSaving(true);
+    setDeleteNoteError("");
+    try {
+      const response = await fetch(`/api/events/${code}/notes`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "删除备注失败");
+      setData((current) => {
+        if (!current) return current;
+        const next = { ...current, notes: current.notes.filter((note) => !note.isCurrent) };
+        dataRef.current = next;
+        return next;
+      });
+      setDeletingNote(false);
+      setEditingNote(false);
+      setNoteDraft("");
+    } catch (caught) {
+      setDeleteNoteError(caught instanceof Error ? caught.message : "删除备注失败");
+    } finally {
+      setNoteSaving(false);
+    }
   };
 
   const saveNote = async () => {
@@ -1736,6 +1766,7 @@ export function EventWorkspace({ code }: { code: string }) {
                           )}
                         </time>
                         {note.isCurrent ? (
+                          <div className="flex flex-wrap justify-end gap-1">
                           <button
                             type="button"
                             className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-[var(--accent)]"
@@ -1744,6 +1775,15 @@ export function EventWorkspace({ code }: { code: string }) {
                             <PencilSimpleIcon size={13} weight="bold" />
                             修改
                           </button>
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                            onClick={() => { setDeleteNoteError(""); setDeletingNote(true); }}
+                          >
+                            <TrashIcon size={13} weight="bold" />
+                            删除
+                          </button>
+                          </div>
                         ) : null}
                       </div>
                     </article>
@@ -1935,6 +1975,17 @@ export function EventWorkspace({ code }: { code: string }) {
           </section>
         </div>
       </div>
+
+      {deletingNote ? (
+        <Modal title="删除这条备注？" onClose={() => { if (!noteSaving) setDeletingNote(false); }}>
+          <p className="text-sm leading-6 text-slate-600">删除后，所有参与者都将无法再看到这条备注。此操作无法撤销。</p>
+          {deleteNoteError ? <p className="form-error">{deleteNoteError}</p> : null}
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button type="button" className="secondary-button justify-center" disabled={noteSaving} onClick={() => setDeletingNote(false)}>取消</button>
+            <button type="button" className="secondary-button justify-center text-red-600" disabled={noteSaving} onClick={() => void deleteNote()}>{noteSaving ? "正在删除" : "确认删除"}</button>
+          </div>
+        </Modal>
+      ) : null}
 
       {finalPlanSeed ? (
         <FinalPlanModal

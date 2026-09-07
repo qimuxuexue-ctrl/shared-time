@@ -13,6 +13,34 @@ const noteSchema = z.object({
   content: z.string().trim().min(1, "请输入备注内容").max(500, "备注最多 500 个字符"),
 });
 
+export async function DELETE(
+  request: Request,
+  context: RouteContext<"/api/events/[code]/notes">,
+) {
+  const { code: rawCode } = await context.params;
+  const code = rawCode.trim().toUpperCase();
+  const parsed = z.object({ identityId: z.uuid() }).safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return Response.json({ error: "邀请码格式不正确" }, { status: 400 });
+  }
+  if (!parsed.success) return validationError(parsed.error);
+  const { data: event, error: eventError } = await supabaseAdmin
+    .from("events").select("id").eq("share_code", code).maybeSingle();
+  if (eventError) return serverError();
+  if (!event) return Response.json({ error: "事件不存在" }, { status: 404 });
+  const { data: member, error: memberError } = await supabaseAdmin
+    .from("event_members").select("id").eq("event_id", event.id)
+    .eq("identity_id", parsed.data.identityId).maybeSingle();
+  if (memberError) return serverError();
+  if (!member) return Response.json({ error: "你还没有加入这个事件" }, { status: 403 });
+  const { error } = await supabaseAdmin.from("event_notes").delete()
+    .eq("event_id", event.id).eq("member_id", member.id);
+  if (error) return serverError("删除备注失败，请稍后重试");
+  return Response.json({ ok: true });
+}
+
 export async function PUT(
   request: Request,
   context: RouteContext<"/api/events/[code]/notes">,
