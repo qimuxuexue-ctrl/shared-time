@@ -22,9 +22,10 @@ npm run dev
 ```text
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_your_key
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 ```
 
-`SUPABASE_SECRET_KEY` 只能存在于服务端环境变量中，不要提交到 Git。
+`SUPABASE_SECRET_KEY` 和 `GOOGLE_MAPS_API_KEY` 只能存在于服务端环境变量中，不要提交到 Git。旅行计划的地点联想需要在 Google Cloud 中启用 Places API (New)。
 
 ## 数据库
 
@@ -45,4 +46,4 @@ node --env-file=.env.local scripts/smoke-api.mjs
 
 ## 部署
 
-将仓库推送至 GitHub，在 Vercel 导入仓库，并配置与本地相同的两个环境变量。
+将仓库推送至 GitHub，在 Vercel 导入仓库，并配置与本地相同的环境变量。

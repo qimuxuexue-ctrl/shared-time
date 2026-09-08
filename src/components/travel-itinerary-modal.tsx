@@ -1,7 +1,7 @@
 "use client";
 
 import { MagnifyingGlassIcon, MapPinIcon, TrashIcon } from "@phosphor-icons/react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/modal";
 import type { TravelItineraryItem } from "@/lib/types";
@@ -13,6 +13,8 @@ type PlaceResult = {
   latitude: number;
   longitude: number;
 };
+
+type PlaceSuggestion = Pick<PlaceResult, "id" | "name" | "address">;
 
 export function TravelItineraryModal({
   code,
@@ -45,26 +47,58 @@ export function TravelItineraryModal({
     latitude: existing.latitude,
     longitude: existing.longitude,
   } : null);
-  const [results, setResults] = useState<PlaceResult[]>([]);
+  const [results, setResults] = useState<PlaceSuggestion[]>([]);
+  const [searchEnabled, setSearchEnabled] = useState(false);
+  const [sessionToken, setSessionToken] = useState(() => crypto.randomUUID());
   const [searching, setSearching] = useState(false);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
-  const search = async () => {
-    if (query.trim().length < 2) return;
-    setSearching(true);
+  useEffect(() => {
+    if (!searchEnabled || query.trim().length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({ q: query.trim(), sessionToken });
+        const response = await fetch(`/api/places/search?${params}`, { signal: controller.signal });
+        const payload = (await response.json()) as { places?: PlaceSuggestion[]; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "地点搜索失败");
+        setResults(payload.places ?? []);
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        setError(caught instanceof Error ? caught.message : "地点搜索失败");
+      } finally {
+        if (!controller.signal.aborted) setSearching(false);
+      }
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, searchEnabled, sessionToken]);
+
+  const selectSuggestion = async (suggestion: PlaceSuggestion) => {
+    setSelectingId(suggestion.id);
     setError("");
     try {
-      const response = await fetch(`/api/places/search?q=${encodeURIComponent(query.trim())}`);
-      const payload = (await response.json()) as { places?: PlaceResult[]; error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "地点搜索失败");
-      setResults(payload.places ?? []);
-      if (!payload.places?.length) setError("没有找到这个地点，请尝试更完整的名称");
+      const params = new URLSearchParams({ placeId: suggestion.id, sessionToken });
+      const response = await fetch(`/api/places/details?${params}`);
+      const payload = (await response.json()) as { place?: PlaceResult; error?: string };
+      if (!response.ok || !payload.place) throw new Error(payload.error ?? "读取地点失败");
+      setPlace(payload.place);
+      setQuery(payload.place.name);
+      setResults([]);
+      setSearchEnabled(false);
+      setSessionToken(crypto.randomUUID());
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "地点搜索失败");
+      setError(caught instanceof Error ? caught.message : "读取地点失败");
     } finally {
-      setSearching(false);
+      setSelectingId(null);
     }
   };
 
@@ -148,26 +182,31 @@ export function TravelItineraryModal({
 
         <div>
           <label htmlFor="place-query" className="field-label">地点</label>
-          <div className="flex gap-2">
-            <input id="place-query" className="text-input" value={query} onChange={(event) => {
+          <div className="relative">
+            <MagnifyingGlassIcon size={18} weight="bold" className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-slate-400" />
+            <input id="place-query" className="text-input pl-10 pr-24" value={query} onChange={(event) => {
               setQuery(event.target.value);
+              setSearchEnabled(true);
+              setResults([]);
+              setSearching(false);
+              setError("");
               if (event.target.value !== place?.name) setPlace(null);
             }} placeholder="例如 浅草寺" autoFocus={!existing} maxLength={120} />
-            <button type="button" className="secondary-button shrink-0 px-4" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
-              <MagnifyingGlassIcon size={18} weight="bold" />{searching ? "搜索中" : "搜索"}
-            </button>
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-400">{searching ? "正在查找" : "Google"}</span>
           </div>
-          <p className="mt-2 text-xs text-slate-400">地点搜索数据由 OpenStreetMap 提供。</p>
+          <p className="mt-2 text-xs text-slate-400">输入至少两个字符，即可查看地点建议。</p>
         </div>
 
         {results.length > 0 ? (
-          <div className="max-h-52 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+          <div className="-mt-3 max-h-56 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_14px_36px_rgba(67,83,108,0.12)]">
             {results.map((result) => (
-              <button key={result.id} type="button" className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition ${place?.id === result.id ? "bg-blue-50 text-blue-700" : "bg-white text-slate-700 hover:bg-slate-100"}`} onClick={() => { setPlace(result); setQuery(result.name); }}>
-                <MapPinIcon className="mt-0.5 shrink-0" size={17} weight={place?.id === result.id ? "fill" : "bold"} />
-                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{result.name}</span><span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-slate-500">{result.address}</span></span>
+              <button key={result.id} type="button" disabled={selectingId !== null} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" onClick={() => void selectSuggestion(result)}>
+                <MapPinIcon className="mt-0.5 shrink-0 text-slate-400" size={17} weight="bold" />
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{result.name}</span><span className="mt-0.5 block truncate text-xs leading-5 text-slate-500">{result.address}</span></span>
+                {selectingId === result.id ? <span className="ml-auto shrink-0 text-xs text-slate-400">读取中</span> : null}
               </button>
             ))}
+            <p className="px-3 py-1.5 text-right text-[10px] font-semibold text-slate-400">Powered by Google</p>
           </div>
         ) : null}
 
