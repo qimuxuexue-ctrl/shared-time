@@ -1333,6 +1333,14 @@ export function EventWorkspace({ code }: { code: string }) {
             setEditingMember(true);
           }}
           onTimeZoneChange={(timeZone) => void saveTimeZone(timeZone)}
+          onItineraryChange={(itinerary) => {
+            setData((current) => {
+              if (!current) return current;
+              const next = { ...current, itinerary };
+              dataRef.current = next;
+              return next;
+            });
+          }}
         />
 
         {showDeleteConfirm ? (

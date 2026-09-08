@@ -16,15 +16,21 @@ import {
   UsersThreeIcon,
 } from "@phosphor-icons/react";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 
 import { EventPresence } from "@/components/event-presence";
+import { TravelItineraryModal } from "@/components/travel-itinerary-modal";
 import {
   addDaysToDateString,
   EVENT_TIME_ZONE_OPTIONS,
   getEventTimeZoneLabel,
   getMondayDateString,
 } from "@/lib/dates";
-import type { EventTimeZone, EventWorkspaceData } from "@/lib/types";
+import type {
+  EventTimeZone,
+  EventWorkspaceData,
+  TravelItineraryItem,
+} from "@/lib/types";
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -54,6 +60,7 @@ export function TravelPlanWorkspace({
   onLeave,
   onEditTag,
   onTimeZoneChange,
+  onItineraryChange,
 }: {
   data: EventWorkspaceData;
   identityId: string;
@@ -66,6 +73,7 @@ export function TravelPlanWorkspace({
   onLeave: () => void;
   onEditTag: () => void;
   onTimeZoneChange: (timeZone: EventTimeZone) => void;
+  onItineraryChange: (items: TravelItineraryItem[]) => void;
 }) {
   const endDate = data.event.endDate ?? data.event.startDate;
   const firstWeek = getMondayDateString(data.event.startDate);
@@ -73,7 +81,22 @@ export function TravelPlanWorkspace({
   const dates = Array.from({ length: 7 }, (_, index) =>
     addDaysToDateString(weekStart, index),
   );
-  const mapQuery = encodeURIComponent(data.event.name);
+  const [draft, setDraft] = useState<TravelItineraryItem | { date: string; startHour: number } | null>(null);
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const sortedItems = useMemo(
+    () => [...data.itinerary].sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour),
+    [data.itinerary],
+  );
+  const focusedItem = sortedItems.find((item) => item.id === focusedItemId) ?? sortedItems[0];
+  const mapQuery = encodeURIComponent(
+    focusedItem ? `${focusedItem.latitude},${focusedItem.longitude}` : data.event.name,
+  );
+
+  const focusItem = (item: TravelItineraryItem) => {
+    setFocusedItemId(item.id);
+    const itemWeek = getMondayDateString(item.date);
+    if (itemWeek !== weekStart) onWeekChange(itemWeek);
+  };
 
   return (
     <main className="min-h-[100dvh] bg-[var(--page)] pb-10">
@@ -136,6 +159,26 @@ export function TravelPlanWorkspace({
                 referrerPolicy="no-referrer-when-downgrade"
                 allowFullScreen
               />
+              {sortedItems.length > 0 ? (
+                <div className="max-h-60 space-y-1.5 overflow-y-auto border-t border-slate-100 p-2">
+                  {sortedItems.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${focusedItem?.id === item.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+                      onClick={() => focusItem(item)}
+                    >
+                      <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-xs font-bold ${focusedItem?.id === item.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{index + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{item.placeName}</span>
+                        <span className="block text-xs tabular-nums text-slate-400">{formatShortDate(item.date)} · {String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="border-t border-slate-100 px-4 py-3 text-xs leading-5 text-slate-400">点击右侧旅行日历中的时间格，添加第一个地点。</p>
+              )}
             </section>
 
             <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
@@ -183,7 +226,41 @@ export function TravelPlanWorkspace({
                     <div className="border-b border-slate-100 px-2 pt-3 text-right text-xs tabular-nums text-slate-400">{String(hour).padStart(2, "0")}:00</div>
                     {dates.map((date) => {
                       const locked = date < data.event.startDate || date > endDate;
-                      return <div key={`${date}-${hour}`} aria-disabled={locked} className={`border-b border-l border-slate-100 ${locked ? "bg-slate-50/80" : "bg-white"}`} />;
+                      const items = sortedItems.filter((item) => item.date === date && item.startHour === hour);
+                      return (
+                        <div
+                          key={`${date}-${hour}`}
+                          aria-disabled={locked}
+                          className={`min-h-20 border-b border-l border-slate-100 p-1.5 ${locked ? "bg-slate-50/80" : "cursor-pointer bg-white transition hover:bg-blue-50/40"}`}
+                          role={locked ? undefined : "button"}
+                          tabIndex={locked ? undefined : 0}
+                          onClick={() => { if (!locked) setDraft({ date, startHour: hour }); }}
+                          onKeyDown={(event) => {
+                            if (!locked && (event.key === "Enter" || event.key === " ")) {
+                              event.preventDefault();
+                              setDraft({ date, startHour: hour });
+                            }
+                          }}
+                        >
+                          <div className="space-y-1">
+                            {items.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`block w-full overflow-hidden rounded-lg border px-2 py-1.5 text-left transition ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  focusItem(item);
+                                  setDraft(item);
+                                }}
+                              >
+                                <span className="block truncate text-xs font-semibold">{item.placeName}</span>
+                                <span className="mt-0.5 block text-[10px] tabular-nums text-slate-500">{String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
                     })}
                   </div>
                 ))}
@@ -192,6 +269,30 @@ export function TravelPlanWorkspace({
           </section>
         </div>
       </div>
+
+      {draft ? (
+        <TravelItineraryModal
+          code={data.event.shareCode}
+          identityId={identityId}
+          startDate={data.event.startDate}
+          endDate={endDate}
+          seed={draft}
+          onClose={() => setDraft(null)}
+          onSaved={(item) => {
+            onItineraryChange([
+              ...data.itinerary.filter((current) => current.id !== item.id),
+              item,
+            ]);
+            setFocusedItemId(item.id);
+            setDraft(null);
+          }}
+          onDeleted={(itemId) => {
+            onItineraryChange(data.itinerary.filter((item) => item.id !== itemId));
+            setFocusedItemId((current) => current === itemId ? null : current);
+            setDraft(null);
+          }}
+        />
+      ) : null}
     </main>
   );
 }

@@ -115,6 +115,7 @@ export async function GET(
     { data: slots, error: slotsError },
     { data: notes, error: notesError },
     { data: finalPeriods },
+    { data: itinerary, error: itineraryError },
   ] =
     await Promise.all([
       supabaseAdmin
@@ -139,9 +140,15 @@ export async function GET(
         .eq("event_id", event.id)
         .order("slot_date", { ascending: true })
         .order("start_hour", { ascending: true }),
+      supabaseAdmin
+        .from("travel_itinerary_items")
+        .select("id, member_id, trip_date, start_hour, end_hour, place_name, address, latitude, longitude, created_at")
+        .eq("event_id", event.id)
+        .order("trip_date", { ascending: true })
+        .order("start_hour", { ascending: true }),
     ]);
 
-  if (membersError || slotsError || notesError) {
+  if (membersError || slotsError || notesError || itineraryError) {
     return serverError();
   }
 
@@ -215,6 +222,25 @@ export async function GET(
               updatedAt: note.updated_at,
             },
           ]
+        : [];
+    }),
+    itinerary: (itinerary ?? []).flatMap((item) => {
+      const author = membersById.get(item.member_id);
+      return author
+        ? [{
+            id: item.id,
+            memberId: item.member_id,
+            authorTagName: author.tag_name,
+            authorTagColor: author.tag_color,
+            date: item.trip_date,
+            startHour: item.start_hour,
+            endHour: item.end_hour,
+            placeName: item.place_name,
+            address: item.address,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            createdAt: item.created_at,
+          }]
         : [];
     }),
     availability: (slots ?? []).map((slot) => ({

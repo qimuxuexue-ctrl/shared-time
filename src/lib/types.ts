@@ -95,6 +95,21 @@ export type EventNote = {
   updatedAt: string;
 };
 
+export type TravelItineraryItem = {
+  id: string;
+  memberId: string;
+  authorTagName: string;
+  authorTagColor: string;
+  date: string;
+  startHour: number;
+  endHour: number;
+  placeName: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  createdAt: string;
+};
+
 export type EventWorkspaceData = {
   event: {
     id: string;
@@ -117,5 +132,6 @@ export type EventWorkspaceData = {
   weekStart: string;
   members: EventMember[];
   notes: EventNote[];
+  itinerary: TravelItineraryItem[];
   availability: AvailabilitySlot[];
 };
