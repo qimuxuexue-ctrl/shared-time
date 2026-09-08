@@ -6,6 +6,7 @@ import {
   CaretDownIcon,
   ClockIcon,
   HashIcon,
+  MapTrifoldIcon,
   PlusIcon,
   QuestionMarkIcon,
   SignOutIcon,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/browser-identity";
 import {
   EVENT_TIME_ZONE_OPTIONS,
+  getDateStringInTimeZone,
   getEventTimeZoneLabel,
 } from "@/lib/dates";
 import type {
@@ -39,6 +41,7 @@ import type {
   HomeNotification,
   HomeNotificationType,
   Identity,
+  WorkspaceKind,
 } from "@/lib/types";
 
 type IdentityResponse = {
@@ -528,7 +531,9 @@ export function HomeApp() {
                         {event.participantCount} 人参加
                       </span>
                       <span>
-                        {event.eventType === "one_time" ? "一次性" : "常驻"}
+                        {event.workspaceKind === "travel_plan"
+                          ? "旅行计划"
+                          : event.eventType === "one_time" ? "一次性" : "常驻"}
                         {" · "}
                         {getEventTimeZoneLabel(event.timeZone, true)}
                       </span>
@@ -629,11 +634,15 @@ function GuideButton({
 function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity; onClose: () => void; onCreated: (event: EventSummary) => void }) {
   const [name, setName] = useState("");
   const [tagName, setTagName] = useState("");
+  const [workspaceKind, setWorkspaceKind] = useState<WorkspaceKind>("share_time");
   const [eventType, setEventType] = useState<EventType>("one_time");
   const [timeZone, setTimeZone] =
     useState<EventTimeZone>("Asia/Shanghai");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const today = getDateStringInTimeZone(timeZone);
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
   const submit = async (formEvent: FormEvent<HTMLFormElement>) => {
     formEvent.preventDefault();
@@ -647,7 +656,10 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           identityId: identity.id,
           name,
           tagName,
+          workspaceKind,
           eventType,
+          startDate: workspaceKind === "travel_plan" ? startDate : undefined,
+          endDate: workspaceKind === "travel_plan" ? endDate : undefined,
           timeZone,
         }),
       });
@@ -663,9 +675,32 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
   return (
     <Modal title="创建事件" onClose={onClose}>
       <form onSubmit={submit} className="space-y-5">
+        <fieldset>
+          <legend className="field-label">创建类型</legend>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5">
+            <button
+              type="button"
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition ${workspaceKind === "share_time" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              onClick={() => setWorkspaceKind("share_time")}
+              aria-pressed={workspaceKind === "share_time"}
+            >
+              <ClockIcon size={17} weight="bold" />
+              Share time
+            </button>
+            <button
+              type="button"
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition ${workspaceKind === "travel_plan" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              onClick={() => setWorkspaceKind("travel_plan")}
+              aria-pressed={workspaceKind === "travel_plan"}
+            >
+              <MapTrifoldIcon size={17} weight="bold" />
+              Travel plan
+            </button>
+          </div>
+        </fieldset>
         <div>
           <label htmlFor="event-name" className="field-label">事件名称</label>
-          <input id="event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="例如 日英课" autoFocus maxLength={80} />
+          <input id="event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={workspaceKind === "travel_plan" ? "例如 东京 5 日游" : "例如 日英课"} autoFocus maxLength={80} />
         </div>
         <div>
           <label htmlFor="create-tag" className="field-label">你的 Tag</label>
@@ -674,16 +709,38 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
             Tag 用于事件内展示，可与 ID/昵称不同；进入事件后仍可修改名称和颜色。
           </p>
         </div>
-        <div>
-          <label htmlFor="event-type" className="field-label">事件类型</label>
-          <select id="event-type" className="text-input" value={eventType} onChange={(event) => setEventType(event.target.value as EventType)}>
-            <option value="one_time">一次性事件 · 仅本周</option>
-            <option value="ongoing">常驻事件 · 可持续预约</option>
-          </select>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            一次性事件在本周结束后自动清理；常驻事件可以一直向后预约。
-          </p>
-        </div>
+        {workspaceKind === "share_time" ? (
+          <div>
+            <label htmlFor="event-type" className="field-label">使用方式</label>
+            <select id="event-type" className="text-input" value={eventType} onChange={(event) => setEventType(event.target.value as EventType)}>
+              <option value="one_time">一次性事件 · 仅本周</option>
+              <option value="ongoing">常驻事件 · 可持续预约</option>
+            </select>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              一次性事件在本周结束后自动清理；常驻事件可以一直向后预约。
+            </p>
+          </div>
+        ) : (
+          <div>
+            <span className="field-label">旅行日期</span>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-slate-500">
+                开始
+                <input type="date" className="text-input mt-1" value={startDate} onChange={(event) => {
+                  setStartDate(event.target.value);
+                  if (endDate < event.target.value) setEndDate(event.target.value);
+                }} />
+              </label>
+              <label className="text-xs font-medium text-slate-500">
+                结束
+                <input type="date" className="text-input mt-1" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              </label>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              日历按周一开始展示，旅行日期之外的时间会锁定。
+            </p>
+          </div>
+        )}
         <div>
           <label htmlFor="event-time-zone" className="field-label">事件时区</label>
           <select

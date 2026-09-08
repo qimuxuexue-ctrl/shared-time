@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       supabaseAdmin
         .from("events")
         .select(
-          "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at",
+          "id, share_code, name, start_date, end_date, weeks_ahead, workspace_kind, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at",
         )
         .eq("share_code", shareCode)
         .maybeSingle(),
@@ -82,7 +82,9 @@ export async function POST(request: Request) {
         shareCode: event.share_code,
         name: event.name,
         startDate: event.start_date,
+        endDate: event.end_date,
         weeksAhead: event.weeks_ahead,
+        workspaceKind: event.workspace_kind,
         eventType: event.event_type,
         timeZone: event.time_zone,
         finalTime:
@@ -143,7 +145,9 @@ export async function POST(request: Request) {
         shareCode: event.share_code,
         name: event.name,
         startDate: event.start_date,
+        endDate: event.end_date,
         weeksAhead: event.weeks_ahead,
+        workspaceKind: event.workspace_kind,
         eventType: event.event_type,
         timeZone: event.time_zone,
         finalTime:

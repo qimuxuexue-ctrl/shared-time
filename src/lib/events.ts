@@ -16,7 +16,9 @@ type JoinedEvent = {
   share_code: string;
   name: string;
   start_date: string;
+  end_date: string | null;
   weeks_ahead: number;
+  workspace_kind: "share_time" | "travel_plan";
   event_type: "one_time" | "ongoing";
   time_zone: "Asia/Shanghai" | "Asia/Tokyo";
   final_date: string | null;
@@ -219,7 +221,7 @@ async function getIdentityEvents(identityId: string) {
   const { data, error } = await supabaseAdmin
     .from("event_members")
     .select(
-      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, weeks_ahead, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at)",
+      "id, tag_name, tag_color, events!inner(id, share_code, name, start_date, end_date, weeks_ahead, workspace_kind, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at)",
     )
     .eq("identity_id", identityId);
 
@@ -269,7 +271,9 @@ async function getIdentityEvents(identityId: string) {
         shareCode: event.share_code,
         name: event.name,
         startDate: event.start_date,
+        endDate: event.end_date,
         weeksAhead: event.weeks_ahead,
+        workspaceKind: event.workspace_kind,
         eventType: event.event_type,
         timeZone: event.time_zone,
         finalTime:

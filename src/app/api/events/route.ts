@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { getDateStringInTimeZone, getMondayDateString } from "@/lib/dates";
+import {
+  getDateStringInTimeZone,
+  getMondayDateString,
+  isValidDateString,
+} from "@/lib/dates";
 import {
   createShareCode,
   getIdentityHomeData,
@@ -11,13 +15,25 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const identityIdSchema = z.uuid("身份 ID 不正确");
 
-const createEventSchema = z.object({
-  identityId: identityIdSchema,
-  name: z.string().trim().min(1, "请输入事件名称").max(80),
-  tagName: z.string().trim().min(1).max(24).optional(),
-  eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
-  timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]).default("Asia/Shanghai"),
-});
+const createEventSchema = z
+  .object({
+    identityId: identityIdSchema,
+    name: z.string().trim().min(1, "请输入事件名称").max(80),
+    tagName: z.string().trim().min(1).max(24).optional(),
+    workspaceKind: z.enum(["share_time", "travel_plan"]).default("share_time"),
+    eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
+    startDate: z.string().refine(isValidDateString, "开始日期不正确").optional(),
+    endDate: z.string().refine(isValidDateString, "结束日期不正确").optional(),
+    timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]).default("Asia/Shanghai"),
+  })
+  .superRefine((value, context) => {
+    if (value.workspaceKind !== "travel_plan") return;
+    if (!value.startDate || !value.endDate) {
+      context.addIssue({ code: "custom", message: "请选择完整的旅行日期" });
+    } else if (value.endDate < value.startDate) {
+      context.addIssue({ code: "custom", message: "结束日期不能早于开始日期" });
+    }
+  });
 
 export async function GET(request: Request) {
   const identityId = new URL(request.url).searchParams.get("identityId");
@@ -43,7 +59,7 @@ export async function POST(request: Request) {
     return validationError(parsed.error);
   }
 
-  const { identityId, name, eventType, timeZone } = parsed.data;
+  const { identityId, name, workspaceKind, timeZone } = parsed.data;
   const { data: identity, error: identityError } = await supabaseAdmin
     .from("identities")
     .select("id, display_id")
@@ -58,7 +74,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "找不到这个身份" }, { status: 404 });
   }
 
-  const startDate = getMondayDateString(getDateStringInTimeZone(timeZone));
+  const startDate =
+    workspaceKind === "travel_plan"
+      ? parsed.data.startDate!
+      : getMondayDateString(getDateStringInTimeZone(timeZone));
+  const endDate = workspaceKind === "travel_plan" ? parsed.data.endDate! : null;
+  const eventType = workspaceKind === "travel_plan" ? "ongoing" : parsed.data.eventType;
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const shareCode = createShareCode();
@@ -70,11 +91,13 @@ export async function POST(request: Request) {
         creator_identity_id: identityId,
         start_date: startDate,
         weeks_ahead: 1,
+        workspace_kind: workspaceKind,
+        end_date: endDate,
         event_type: eventType,
         time_zone: timeZone,
       })
       .select(
-        "id, share_code, name, start_date, weeks_ahead, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at",
+        "id, share_code, name, start_date, end_date, weeks_ahead, workspace_kind, event_type, time_zone, final_date, final_start_hour, finalized_at, status, creator_identity_id, created_at",
       )
       .single();
 
@@ -109,7 +132,9 @@ export async function POST(request: Request) {
           shareCode: event.share_code,
           name: event.name,
           startDate: event.start_date,
+          endDate: event.end_date,
           weeksAhead: event.weeks_ahead,
+          workspaceKind: event.workspace_kind,
           eventType: event.event_type,
           timeZone: event.time_zone,
           finalTime: null,

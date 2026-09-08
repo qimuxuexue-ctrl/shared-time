@@ -27,7 +27,9 @@ create table if not exists public.events (
   name text not null,
   creator_identity_id uuid not null references public.identities(id) on delete restrict,
   start_date date not null,
+  end_date date,
   weeks_ahead smallint not null default 4,
+  workspace_kind text not null default 'share_time',
   event_type text not null default 'ongoing',
   time_zone text not null default 'Asia/Shanghai',
   final_date date,
@@ -43,6 +45,8 @@ create table if not exists public.events (
   constraint events_share_code_format check (share_code ~ '^[A-Z0-9]{6}$'),
   constraint events_name_length check (char_length(name) between 1 and 80),
   constraint events_weeks_ahead_range check (weeks_ahead between 1 and 12),
+  constraint events_workspace_kind_values check (workspace_kind in ('share_time', 'travel_plan')),
+  constraint events_date_range check (end_date is null or end_date >= start_date),
   constraint events_event_type_values check (event_type in ('one_time', 'ongoing')),
   constraint events_time_zone_values check (time_zone in ('Asia/Shanghai', 'Asia/Tokyo')),
   constraint events_final_time_complete check (
@@ -58,6 +62,24 @@ create table if not exists public.events (
 
 alter table public.events
   add column if not exists event_type text not null default 'ongoing';
+
+alter table public.events
+  add column if not exists workspace_kind text not null default 'share_time',
+  add column if not exists end_date date;
+
+alter table public.events
+  drop constraint if exists events_workspace_kind_values;
+
+alter table public.events
+  add constraint events_workspace_kind_values
+  check (workspace_kind in ('share_time', 'travel_plan'));
+
+alter table public.events
+  drop constraint if exists events_date_range;
+
+alter table public.events
+  add constraint events_date_range
+  check (end_date is null or end_date >= start_date);
 
 alter table public.events
   add column if not exists time_zone text not null default 'Asia/Shanghai';

@@ -93,9 +93,18 @@ export async function GET(
     getDateStringInTimeZone(event.time_zone),
   );
   const requestedWeekStart = parsed.data.weekStart ?? currentWeekStart;
-  const weekStart =
-    requestedWeekStart < event.start_date
-      ? event.start_date
+  const rangeStart =
+    event.workspace_kind === "travel_plan"
+      ? getMondayDateString(event.start_date)
+      : event.start_date;
+  const rangeEnd =
+    event.workspace_kind === "travel_plan" && event.end_date
+      ? getMondayDateString(event.end_date)
+      : null;
+  const weekStart = requestedWeekStart < rangeStart
+    ? rangeStart
+    : rangeEnd && requestedWeekStart > rangeEnd
+      ? rangeEnd
       : event.event_type === "one_time" && requestedWeekStart > event.start_date
         ? event.start_date
         : requestedWeekStart;
@@ -145,7 +154,9 @@ export async function GET(
       shareCode: event.share_code,
       name: event.name,
       startDate: event.start_date,
+      endDate: event.end_date ?? null,
       weeksAhead: event.weeks_ahead,
+      workspaceKind: event.workspace_kind ?? "share_time",
       eventType: event.event_type,
       timeZone: event.time_zone,
       finalTime:

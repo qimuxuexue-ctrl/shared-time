@@ -31,8 +31,10 @@ import {
 } from "react";
 
 import { DeleteEventModal } from "@/components/delete-event-modal";
+import { EventPresence } from "@/components/event-presence";
 import { LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
+import { TravelPlanWorkspace } from "@/components/travel-plan-workspace";
 import { readStoredIdentity, storeIdentity } from "@/lib/browser-identity";
 import {
   addDaysToDateString,
@@ -1306,6 +1308,79 @@ export function EventWorkspace({ code }: { code: string }) {
     return <WorkspaceMessage title="无法打开事件" body={error || "请确认邀请码是否正确。"} />;
   }
 
+  if (data.event.workspaceKind === "travel_plan" && identity) {
+    return (
+      <>
+        <TravelPlanWorkspace
+          data={data}
+          identityId={identity.id}
+          weekStart={weekStart}
+          copied={copied}
+          timeZoneSaving={timeZoneSaving}
+          onWeekChange={setWeekStart}
+          onCopy={() => {
+            void navigator.clipboard.writeText(window.location.href);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+          }}
+          onDelete={() => setShowDeleteConfirm(true)}
+          onLeave={() => {
+            setLeaveEventError("");
+            setShowLeaveConfirm(true);
+          }}
+          onEditTag={() => {
+            setMemberError("");
+            setEditingMember(true);
+          }}
+          onTimeZoneChange={(timeZone) => void saveTimeZone(timeZone)}
+        />
+
+        {showDeleteConfirm ? (
+          <DeleteEventModal
+            identity={identity}
+            event={data.event}
+            onClose={() => setShowDeleteConfirm(false)}
+            onDeleted={() => router.replace("/")}
+          />
+        ) : null}
+
+        {showLeaveConfirm && !data.event.isCreator ? (
+          <Modal
+            title="退出这个事件？"
+            onClose={() => {
+              if (leavingEvent) return;
+              setShowLeaveConfirm(false);
+              setLeaveEventError("");
+            }}
+          >
+            <p className="text-sm leading-6 text-slate-600">
+              退出后，你在该旅行计划中的 Tag 和成员记录会被删除；之后仍可通过邀请码重新加入。
+            </p>
+            {leaveEventError ? <p className="form-error mt-4">{leaveEventError}</p> : null}
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button type="button" className="secondary-button justify-center" disabled={leavingEvent} onClick={() => setShowLeaveConfirm(false)}>继续参与</button>
+              <button type="button" className="flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50" disabled={leavingEvent} onClick={() => void leaveEvent()}>{leavingEvent ? "正在退出" : "确认退出"}</button>
+            </div>
+          </Modal>
+        ) : null}
+
+        {editingMember && ownMember ? (
+          <TagSettingsModal
+            member={ownMember}
+            saving={memberSaving}
+            error={memberError}
+            onClose={() => {
+              if (memberSaving) return;
+              setEditingMember(false);
+              setMemberError("");
+            }}
+            onSave={(tagName, tagColor) => void saveMember(tagName, tagColor)}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <main className="min-h-[100dvh] bg-[var(--page)] pb-12">
       <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
@@ -1324,6 +1399,9 @@ export function EventWorkspace({ code }: { code: string }) {
               </p>
             </div>
           </div>
+          {identity ? (
+            <EventPresence code={data.event.shareCode} identityId={identity.id} />
+          ) : null}
           <div className="flex shrink-0 items-center gap-2">
             {data.event.isCreator ? (
               <button

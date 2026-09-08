@@ -5,6 +5,8 @@ export type Identity = {
 
 export type EventType = "one_time" | "ongoing";
 
+export type WorkspaceKind = "share_time" | "travel_plan";
+
 export type EventTimeZone = "Asia/Shanghai" | "Asia/Tokyo";
 
 export type EventUpdateType =
@@ -52,7 +54,9 @@ export type EventSummary = {
   shareCode: string;
   name: string;
   startDate: string;
+  endDate: string | null;
   weeksAhead: number;
+  workspaceKind: WorkspaceKind;
   eventType: EventType;
   timeZone: EventTimeZone;
   finalTime: EventFinalTime | null;
@@ -97,7 +101,9 @@ export type EventWorkspaceData = {
     shareCode: string;
     name: string;
     startDate: string;
+    endDate: string | null;
     weeksAhead: number;
+    workspaceKind: WorkspaceKind;
     eventType: EventType;
     timeZone: EventTimeZone;
     finalTime: EventFinalTime | null;
