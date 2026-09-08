@@ -473,97 +473,22 @@ export function HomeApp() {
             </p>
           </section>
         ) : (
-          <section className="grid gap-4 md:grid-cols-2">
-            {events.map((event) => (
-              <article
-                key={event.id}
-                className={`group relative rounded-[22px] border bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)] ${
-                  event.unreadUpdates.length > 0
-                    ? "border-blue-200/90 shadow-[0_14px_42px_rgba(76,111,173,0.09)] hover:border-blue-300"
-                    : "border-slate-200/80 shadow-[0_14px_42px_rgba(67,83,108,0.06)] hover:border-slate-300"
-                }`}
-              >
-                <Link
-                  href={`/e/${event.shareCode}`}
-                  prefetch
-                  className="block w-full rounded-[22px] p-5 text-left active:bg-slate-50/70"
-                >
-                  <div className={`mb-6 ${event.isCreator ? "pr-20" : "pr-9"}`}>
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <h2 className="min-w-0 truncate text-xl font-semibold tracking-tight text-slate-950">
-                          {event.name}
-                        </h2>
-                        {event.unreadUpdates.length > 0 ? (
-                          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600">
-                            <span className="size-1.5 rounded-full bg-blue-500" />
-                            新动态
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
-                        <HashIcon size={14} weight="bold" />
-                        {event.shareCode}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex min-h-7 items-end justify-between gap-3">
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                      {event.participants.slice(0, 3).map((participant) => (
-                        <span
-                          key={participant.id}
-                          className="max-w-28 truncate rounded-lg px-2.5 py-1.5 text-sm font-semibold"
-                          style={{
-                            color: participant.tagColor,
-                            backgroundColor: `${participant.tagColor}14`,
-                          }}
-                        >
-                          {participant.tagName}
-                        </span>
-                      ))}
-                      {event.participantCount > 3 ? (
-                        <span className="px-1 text-sm font-semibold text-slate-400">…</span>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1 text-sm text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <UsersThreeIcon size={15} weight="bold" />
-                        {event.participantCount} 人参加
-                      </span>
-                      <span>
-                        {event.workspaceKind === "travel_plan"
-                          ? "旅行计划"
-                          : event.eventType === "one_time" ? "一次性" : "常驻"}
-                        {" · "}
-                        {getEventTimeZoneLabel(event.timeZone, true)}
-                      </span>
-                      {event.finalTime ? (
-                        <span className="font-semibold text-blue-600">
-                          {formatFinalTimeSummary(event.finalTime)}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <ArrowRightIcon
-                    size={20}
-                    weight="bold"
-                    className="pointer-events-none absolute right-4 top-[1.35rem] text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]"
-                  />
-                </Link>
-                {event.isCreator ? (
-                  <button
-                    type="button"
-                    className="absolute right-11 top-3.5 z-10 grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600 active:scale-95"
-                    onClick={() => setDeleteTarget(event)}
-                    aria-label={`删除事件 ${event.name}`}
-                    title="删除事件"
-                  >
-                    <TrashIcon size={18} weight="bold" />
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </section>
+          <div className="space-y-10">
+            <EventGroup
+              title="Share time"
+              description="共同填写空闲时间并确认安排"
+              events={events.filter((event) => event.workspaceKind === "share_time")}
+              emptyText="还没有 Share time 事件"
+              onDelete={setDeleteTarget}
+            />
+            <EventGroup
+              title="Travel plan"
+              description="围绕旅行日期共同规划行程"
+              events={events.filter((event) => event.workspaceKind === "travel_plan")}
+              emptyText="还没有 Travel plan 事件"
+              onDelete={setDeleteTarget}
+            />
+          </div>
         )}
       </div>
 
@@ -608,6 +533,74 @@ export function HomeApp() {
 
       {guideOpen ? <UsageGuide onClose={() => setGuideOpen(false)} /> : null}
     </main>
+  );
+}
+
+function EventGroup({
+  title,
+  description,
+  events,
+  emptyText,
+  onDelete,
+}: {
+  title: string;
+  description: string;
+  events: EventSummary[];
+  emptyText: string;
+  onDelete: (event: EventSummary) => void;
+}) {
+  return (
+    <section aria-labelledby={`event-group-${title.replace(" ", "-").toLowerCase()}`}>
+      <div className="mb-4 flex items-end justify-between gap-4 border-b border-slate-200/80 pb-3">
+        <div>
+          <h2 id={`event-group-${title.replace(" ", "-").toLowerCase()}`} className="text-xl font-semibold tracking-tight text-slate-900">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+        <span className="shrink-0 text-sm tabular-nums text-slate-400">{events.length} 个事件</span>
+      </div>
+      {events.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {events.map((event) => <EventCard key={event.id} event={event} onDelete={onDelete} />)}
+        </div>
+      ) : (
+        <p className="rounded-[18px] border border-dashed border-slate-300/80 px-5 py-8 text-center text-sm text-slate-400">{emptyText}</p>
+      )}
+    </section>
+  );
+}
+
+function EventCard({ event, onDelete }: { event: EventSummary; onDelete: (event: EventSummary) => void }) {
+  return (
+    <article className={`group relative rounded-[22px] border bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(67,83,108,0.1)] ${event.unreadUpdates.length > 0 ? "border-blue-200/90 shadow-[0_14px_42px_rgba(76,111,173,0.09)] hover:border-blue-300" : "border-slate-200/80 shadow-[0_14px_42px_rgba(67,83,108,0.06)] hover:border-slate-300"}`}>
+      <Link href={`/e/${event.shareCode}`} prefetch className="block w-full rounded-[22px] p-5 text-left active:bg-slate-50/70">
+        <div className={`mb-6 ${event.isCreator ? "pr-20" : "pr-9"}`}>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h3 className="min-w-0 truncate text-xl font-semibold tracking-tight text-slate-950">{event.name}</h3>
+            {event.unreadUpdates.length > 0 ? (
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600"><span className="size-1.5 rounded-full bg-blue-500" />新动态</span>
+            ) : null}
+          </div>
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500"><HashIcon size={14} weight="bold" />{event.shareCode}</p>
+        </div>
+        <div className="flex min-h-7 items-end justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {event.participants.slice(0, 3).map((participant) => (
+              <span key={participant.id} className="max-w-28 truncate rounded-lg px-2.5 py-1.5 text-sm font-semibold" style={{ color: participant.tagColor, backgroundColor: `${participant.tagColor}14` }}>{participant.tagName}</span>
+            ))}
+            {event.participantCount > 3 ? <span className="px-1 text-sm font-semibold text-slate-400">…</span> : null}
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1 text-sm text-slate-400">
+            <span className="flex items-center gap-1"><UsersThreeIcon size={15} weight="bold" />{event.participantCount} 人参加</span>
+            <span>{event.workspaceKind === "travel_plan" ? "旅行计划" : event.eventType === "one_time" ? "一次性" : "常驻"}{" · "}{getEventTimeZoneLabel(event.timeZone, true)}</span>
+            {event.finalTime ? <span className="font-semibold text-blue-600">{formatFinalTimeSummary(event.finalTime)}</span> : null}
+          </div>
+        </div>
+        <ArrowRightIcon size={20} weight="bold" className="pointer-events-none absolute right-4 top-[1.35rem] text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
+      </Link>
+      {event.isCreator ? (
+        <button type="button" className="absolute right-11 top-3.5 z-10 grid size-9 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600 active:scale-95" onClick={() => onDelete(event)} aria-label={`删除事件 ${event.name}`} title="删除事件"><TrashIcon size={18} weight="bold" /></button>
+      ) : null}
+    </article>
   );
 }
 
