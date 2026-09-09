@@ -1,6 +1,6 @@
 "use client";
 
-import { MagnifyingGlassIcon, MapPinIcon, TrashIcon } from "@phosphor-icons/react";
+import { LinkIcon, MagnifyingGlassIcon, MapPinIcon, QuestionMarkIcon, TrashIcon } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/modal";
@@ -48,7 +48,9 @@ export function TravelItineraryModal({
     longitude: existing.longitude,
   } : null);
   const [results, setResults] = useState<PlaceResult[]>([]);
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
   const [searching, setSearching] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -67,6 +69,28 @@ export function TravelItineraryModal({
       setError(caught instanceof Error ? caught.message : "地点搜索失败");
     } finally {
       setSearching(false);
+    }
+  };
+
+  const importGoogleMapsPlace = async () => {
+    if (!googleMapsUrl.trim()) return;
+    setImporting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/places/import-google", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: googleMapsUrl.trim() }),
+      });
+      const payload = (await response.json()) as { place?: PlaceResult; error?: string };
+      if (!response.ok || !payload.place) throw new Error(payload.error ?? "无法读取这个定位");
+      setPlace(payload.place);
+      setQuery(payload.place.name);
+      setResults([]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "无法读取这个定位");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -176,24 +200,61 @@ export function TravelItineraryModal({
           </div>
         </div>
 
-        <div>
-          <label htmlFor="place-query" className="field-label">地点</label>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="place-query" className="field-label mb-0">地点</label>
+            <details className="group relative">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-slate-700">
+                <QuestionMarkIcon size={15} weight="bold" />怎样搜得更准
+              </summary>
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600 shadow-[0_14px_35px_rgba(51,65,85,0.14)]">
+                输入“地点名＋城市”，或补充完整地址、邮编，例如“浅草寺 东京”或“111-0032”。如果仍然搜不到，可在 Google 地图打开该地点，复制分享链接后在下方导入。
+              </div>
+            </details>
+          </div>
           <div className="flex gap-2">
             <input id="place-query" className="text-input" value={query} onChange={(event) => {
               setQuery(event.target.value);
               setResults([]);
               setError("");
               if (event.target.value !== place?.name) setPlace(null);
-            }} placeholder="例如 浅草寺" autoFocus={!existing} maxLength={120} />
+            }} placeholder="地点名称、地址或邮编" autoFocus={!existing} maxLength={120} />
             <button type="button" className="secondary-button shrink-0 px-4" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
               <MagnifyingGlassIcon size={18} weight="bold" />{searching ? "搜索中" : "搜索"}
             </button>
           </div>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="text-xs leading-5 text-slate-400">
             优先显示中文名称，也支持英文搜索；地点数据由
             <a className="ml-1 underline decoration-slate-300 underline-offset-2 hover:text-slate-600" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>
             提供。
           </p>
+
+          <div className="rounded-xl bg-slate-50 p-3">
+            <label htmlFor="google-maps-url" className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+              <LinkIcon size={15} weight="bold" />从 Google 地图导入 <span className="font-normal text-slate-400">（选填）</span>
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="google-maps-url"
+                className="text-input min-w-0"
+                type="url"
+                inputMode="url"
+                value={googleMapsUrl}
+                onChange={(event) => { setGoogleMapsUrl(event.target.value); setError(""); }}
+                placeholder="粘贴 Google 地图分享链接"
+                maxLength={1200}
+              />
+              <button
+                type="button"
+                className="secondary-button shrink-0 justify-center px-4"
+                disabled={importing || !googleMapsUrl.trim()}
+                onClick={() => void importGoogleMapsPlace()}
+              >
+                {importing ? "读取中" : "读取定位"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-400">适合搜索不到的小众地点或店铺；这里无需填写，普通搜索成功后可直接保存。</p>
+          </div>
         </div>
 
         {results.length > 0 ? (
@@ -217,7 +278,7 @@ export function TravelItineraryModal({
 
         <div className={`grid gap-3 ${existing ? "grid-cols-[auto_1fr]" : "grid-cols-1"}`}>
           {existing ? <button type="button" className="secondary-button justify-center text-red-600 hover:border-red-200 hover:bg-red-50" disabled={saving || deleting} onClick={() => void remove()}><TrashIcon size={17} weight="bold" />{deleting ? "正在删除" : "删除"}</button> : null}
-          <button type="submit" className="primary-button w-full" disabled={saving || deleting || !place || !title.trim()}>{saving ? "正在保存" : existing ? "保存修改" : "加入行程"}</button>
+          <button type="submit" className="primary-button w-full" disabled={saving || deleting || importing || !place || !title.trim()}>{saving ? "正在保存" : existing ? "保存修改" : "加入行程"}</button>
         </div>
       </form>
     </Modal>
