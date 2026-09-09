@@ -2,65 +2,52 @@ import { z } from "zod";
 
 const querySchema = z.object({
   q: z.string().trim().min(2, "请输入至少两个字符").max(120),
-  sessionToken: z.string().trim().min(8).max(100),
 });
 
-type GooglePrediction = {
-  placePrediction?: {
-    placeId?: string;
-    text?: { text?: string };
-    structuredFormat?: {
-      mainText?: { text?: string };
-      secondaryText?: { text?: string };
-    };
-  };
+type NominatimPlace = {
+  place_id: number;
+  display_name: string;
+  name?: string;
+  lat: string;
+  lon: string;
 };
 
 export async function GET(request: Request) {
-  const searchParams = new URL(request.url).searchParams;
   const parsed = querySchema.safeParse({
-    q: searchParams.get("q"),
-    sessionToken: searchParams.get("sessionToken"),
+    q: new URL(request.url).searchParams.get("q"),
   });
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
   }
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "Google 地点联想尚未配置" }, { status: 503 });
-  }
-
   try {
-    const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat",
-      },
-      body: JSON.stringify({
-        input: parsed.data.q,
-        languageCode: "zh-CN",
-        sessionToken: parsed.data.sessionToken,
-      }),
-      cache: "no-store",
+    const query = new URLSearchParams({
+      q: parsed.data.q,
+      format: "jsonv2",
+      addressdetails: "1",
+      limit: "5",
+      "accept-language": "zh-CN,zh,en",
     });
-    if (!response.ok) throw new Error("Google autocomplete failed");
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${query}`, {
+      headers: {
+        "accept-language": "zh-CN,zh;q=0.9,en;q=0.7",
+        "user-agent": "ShareTimeline/1.0",
+      },
+      next: { revalidate: 3600 },
+    });
+    if (!response.ok) throw new Error("place search failed");
 
-    const payload = (await response.json()) as { suggestions?: GooglePrediction[] };
+    const places = (await response.json()) as NominatimPlace[];
     return Response.json({
-      places: (payload.suggestions ?? []).flatMap((suggestion) => {
-        const prediction = suggestion.placePrediction;
-        if (!prediction?.placeId) return [];
-        return [{
-          id: prediction.placeId,
-          name: prediction.structuredFormat?.mainText?.text ?? prediction.text?.text ?? "未命名地点",
-          address: prediction.structuredFormat?.secondaryText?.text ?? prediction.text?.text ?? "",
-        }];
-      }),
+      places: places.map((place) => ({
+        id: String(place.place_id),
+        name: place.name?.trim() || place.display_name.split(",")[0],
+        address: place.display_name,
+        latitude: Number(place.lat),
+        longitude: Number(place.lon),
+      })),
     });
   } catch {
-    return Response.json({ error: "Google 地点搜索暂时不可用" }, { status: 502 });
+    return Response.json({ error: "地点搜索暂时不可用" }, { status: 502 });
   }
 }
