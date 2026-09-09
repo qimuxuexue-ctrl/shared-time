@@ -228,6 +228,9 @@ create table if not exists public.travel_itinerary_items (
   address text not null default '',
   latitude double precision not null,
   longitude double precision not null,
+  transport_mode text,
+  transport_duration_minutes smallint,
+  transport_note text,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   constraint travel_itinerary_items_member_event_fk
@@ -242,6 +245,15 @@ create table if not exists public.travel_itinerary_items (
   constraint travel_itinerary_items_place_name_length check (char_length(place_name) between 1 and 120),
   constraint travel_itinerary_items_title_length check (char_length(title) between 1 and 80),
   constraint travel_itinerary_items_note_length check (char_length(note) <= 300),
+  constraint travel_itinerary_items_transport_mode_length check (
+    transport_mode is null or char_length(transport_mode) between 1 and 40
+  ),
+  constraint travel_itinerary_items_transport_duration_range check (
+    transport_duration_minutes is null or transport_duration_minutes between 1 and 1440
+  ),
+  constraint travel_itinerary_items_transport_note_length check (
+    transport_note is null or char_length(transport_note) <= 160
+  ),
   constraint travel_itinerary_items_address_length check (char_length(address) <= 300),
   constraint travel_itinerary_items_latitude check (latitude between -90 and 90),
   constraint travel_itinerary_items_longitude check (longitude between -180 and 180)

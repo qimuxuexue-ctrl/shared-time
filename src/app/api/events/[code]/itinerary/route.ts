@@ -30,6 +30,14 @@ const deleteSchema = z.object({
   itemId: z.uuid("行程 ID 不正确"),
 });
 
+const transportSchema = z.object({
+  identityId: z.uuid("身份 ID 不正确"),
+  itemId: z.uuid("行程 ID 不正确"),
+  transportMode: z.string().trim().min(1).max(40).nullable(),
+  transportDurationMinutes: z.number().int().min(1).max(1440).nullable(),
+  transportNote: z.string().trim().max(160).nullable(),
+});
+
 async function getContext(code: string, identityId: string) {
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
@@ -80,8 +88,42 @@ function mapItem(item: Record<string, unknown>, context: NonNullable<Awaited<Ret
     address: item.address,
     latitude: item.latitude,
     longitude: item.longitude,
+    transportMode: item.transport_mode ?? null,
+    transportDurationMinutes: item.transport_duration_minutes ?? null,
+    transportNote: item.transport_note ?? null,
     createdAt: item.created_at,
   };
+}
+
+export async function PATCH(request: Request, route: RouteContext<"/api/events/[code]/itinerary">) {
+  const { code: rawCode } = await route.params;
+  const code = rawCode.trim().toUpperCase();
+  const parsed = transportSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return validationError(parsed.error);
+
+  const context = await getContext(code, parsed.data.identityId);
+  const contextError = validateContext(context);
+  if (contextError || !context) return contextError!;
+
+  const { data: item, error } = await supabaseAdmin
+    .from("travel_itinerary_items")
+    .update({
+      transport_mode: parsed.data.transportMode,
+      transport_duration_minutes: parsed.data.transportDurationMinutes,
+      transport_note: parsed.data.transportNote,
+    })
+    .eq("id", parsed.data.itemId)
+    .eq("event_id", context.event.id)
+    .select("id, transport_mode, transport_duration_minutes, transport_note")
+    .maybeSingle();
+  if (error) return serverError("保存交通信息失败，请稍后重试");
+  if (!item) return Response.json({ error: "找不到这条行程" }, { status: 404 });
+  return Response.json({
+    itemId: item.id,
+    transportMode: item.transport_mode ?? null,
+    transportDurationMinutes: item.transport_duration_minutes ?? null,
+    transportNote: item.transport_note ?? null,
+  });
 }
 
 export async function POST(request: Request, route: RouteContext<"/api/events/[code]/itinerary">) {

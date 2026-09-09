@@ -423,6 +423,7 @@ export function EventWorkspace({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [timeZoneSaving, setTimeZoneSaving] = useState(false);
+  const [travelDatesSaving, setTravelDatesSaving] = useState(false);
   const [error, setError] = useState("");
   const [missingIdentity, setMissingIdentity] = useState(false);
   const [joinRequired, setJoinRequired] = useState(false);
@@ -1013,6 +1014,32 @@ export function EventWorkspace({ code }: { code: string }) {
     }
   };
 
+  const saveTravelDates = async (startDate: string, endDate: string) => {
+    if (!identity || !data) return;
+    setTravelDatesSaving(true);
+    try {
+      const response = await fetch(`/api/events/${code}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id, startDate, endDate }),
+      });
+      const payload = (await response.json()) as {
+        startDate?: string;
+        endDate?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.startDate || !payload.endDate) {
+        throw new Error(payload.error ?? "修改旅行日期失败");
+      }
+
+      const nextWeekStart = getMondayDateString(payload.startDate);
+      setWeekStart(nextWeekStart);
+      await loadWorkspace(identity, nextWeekStart);
+    } finally {
+      setTravelDatesSaving(false);
+    }
+  };
+
   const saveFinalTime = async (periods: EventFinalPeriod[]) => {
     if (!identity || !data || periods.length === 0) return;
     setFinalSaving(true);
@@ -1317,6 +1344,7 @@ export function EventWorkspace({ code }: { code: string }) {
           weekStart={weekStart}
           copied={copied}
           timeZoneSaving={timeZoneSaving}
+          travelDatesSaving={travelDatesSaving}
           onWeekChange={setWeekStart}
           onCopy={() => {
             void navigator.clipboard.writeText(window.location.href);
@@ -1333,6 +1361,7 @@ export function EventWorkspace({ code }: { code: string }) {
             setEditingMember(true);
           }}
           onTimeZoneChange={(timeZone) => void saveTimeZone(timeZone)}
+          onTravelDatesChange={saveTravelDates}
           onItineraryChange={(itinerary) => {
             setData((current) => {
               if (!current) return current;

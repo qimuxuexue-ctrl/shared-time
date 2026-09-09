@@ -109,6 +109,9 @@ export type TravelItineraryItem = {
   address: string;
   latitude: number;
   longitude: number;
+  transportMode: string | null;
+  transportDurationMinutes: number | null;
+  transportNote: string | null;
   createdAt: string;
 };
 

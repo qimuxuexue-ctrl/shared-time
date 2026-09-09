@@ -31,6 +31,14 @@ const updateTimeZoneSchema = z.object({
   timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]),
 });
 
+const updateTravelDatesSchema = z.object({
+  identityId: z.uuid("身份 ID 不正确"),
+  startDate: z.string().refine(isValidDateString, "开始日期不正确"),
+  endDate: z.string().refine(isValidDateString, "结束日期不正确"),
+}).refine((value) => value.endDate >= value.startDate, {
+  message: "结束日期不能早于开始日期",
+});
+
 export async function GET(
   request: Request,
   context: RouteContext<"/api/events/[code]">,
@@ -142,7 +150,7 @@ export async function GET(
         .order("start_hour", { ascending: true }),
       supabaseAdmin
         .from("travel_itinerary_items")
-        .select("id, member_id, trip_date, start_hour, end_hour, title, note, place_name, address, latitude, longitude, created_at")
+        .select("id, member_id, trip_date, start_hour, end_hour, title, note, place_name, address, latitude, longitude, transport_mode, transport_duration_minutes, transport_note, created_at")
         .eq("event_id", event.id)
         .order("trip_date", { ascending: true })
         .order("start_hour", { ascending: true }),
@@ -241,6 +249,9 @@ export async function GET(
             address: item.address,
             latitude: item.latitude,
             longitude: item.longitude,
+            transportMode: item.transport_mode ?? null,
+            transportDurationMinutes: item.transport_duration_minutes ?? null,
+            transportNote: item.transport_note ?? null,
             createdAt: item.created_at,
           }]
         : [];
@@ -265,17 +276,26 @@ export async function PATCH(
   }
 
   const payload = await request.json().catch(() => null);
-  const parsed = updateTimeZoneSchema.safeParse(payload);
+  const timeZoneUpdate = updateTimeZoneSchema.safeParse(payload);
+  const travelDatesUpdate = updateTravelDatesSchema.safeParse(payload);
 
-  if (!parsed.success) {
-    return validationError(parsed.error);
+  if (!timeZoneUpdate.success && !travelDatesUpdate.success) {
+    return validationError(
+      "timeZone" in (payload ?? {}) ? timeZoneUpdate.error : travelDatesUpdate.error,
+    );
   }
+
+  const identityId = timeZoneUpdate.success
+    ? timeZoneUpdate.data.identityId
+    : travelDatesUpdate.success
+      ? travelDatesUpdate.data.identityId
+      : "";
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
-    .select("id, creator_identity_id")
+    .select("id, creator_identity_id, workspace_kind")
     .eq("share_code", code)
-    .maybeSingle<{ id: string; creator_identity_id: string }>();
+    .maybeSingle<{ id: string; creator_identity_id: string; workspace_kind: string }>();
 
   if (eventError) {
     return serverError();
@@ -285,18 +305,59 @@ export async function PATCH(
     return Response.json({ error: "事件不存在或已经删除" }, { status: 404 });
   }
 
-  if (event.creator_identity_id !== parsed.data.identityId) {
+  if (event.creator_identity_id !== identityId) {
     return Response.json(
-      { error: "只有事件创建者可以修改时区" },
+      { error: "只有事件创建者可以修改事件设置" },
       { status: 403 },
     );
   }
 
+  if (travelDatesUpdate.success) {
+    if (event.workspace_kind !== "travel_plan") {
+      return Response.json({ error: "只有旅行计划可以修改旅行日期" }, { status: 409 });
+    }
+
+    const { data: itinerary, error: itineraryError } = await supabaseAdmin
+      .from("travel_itinerary_items")
+      .select("trip_date")
+      .eq("event_id", event.id);
+    if (itineraryError) return serverError();
+    const hasOutsideItem = (itinerary ?? []).some(
+      (item) => item.trip_date < travelDatesUpdate.data.startDate
+        || item.trip_date > travelDatesUpdate.data.endDate,
+    );
+    if (hasOutsideItem) {
+      return Response.json({
+        error: "新的日期范围会排除已有行程，请先移动或删除范围外的行程",
+      }, { status: 409 });
+    }
+
+    const { data: updatedEvent, error: updateError } = await supabaseAdmin
+      .from("events")
+      .update({
+        start_date: travelDatesUpdate.data.startDate,
+        end_date: travelDatesUpdate.data.endDate,
+      })
+      .eq("id", event.id)
+      .eq("creator_identity_id", identityId)
+      .select("start_date, end_date")
+      .single<{ start_date: string; end_date: string }>();
+    if (updateError || !updatedEvent) {
+      return serverError("修改旅行日期失败，请稍后重试");
+    }
+    return Response.json({
+      startDate: updatedEvent.start_date,
+      endDate: updatedEvent.end_date,
+    });
+  }
+
+  if (!timeZoneUpdate.success) return validationError(timeZoneUpdate.error);
+
   const { data: updatedEvent, error: updateError } = await supabaseAdmin
     .from("events")
-    .update({ time_zone: parsed.data.timeZone })
+    .update({ time_zone: timeZoneUpdate.data.timeZone })
     .eq("id", event.id)
-    .eq("creator_identity_id", parsed.data.identityId)
+    .eq("creator_identity_id", identityId)
     .select("time_zone")
     .single<{ time_zone: "Asia/Shanghai" | "Asia/Tokyo" }>();
 
