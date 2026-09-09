@@ -12,6 +12,7 @@ import {
   MapPinIcon,
   PencilSimpleIcon,
   PlusIcon,
+  QuestionMarkIcon,
   SignOutIcon,
   TrashIcon,
   UsersThreeIcon,
@@ -22,6 +23,7 @@ import { useMemo, useState } from "react";
 import { EventPresence } from "@/components/event-presence";
 import { Modal } from "@/components/modal";
 import { TravelItineraryModal } from "@/components/travel-itinerary-modal";
+import { TravelPlanGuide } from "@/components/travel-plan-guide";
 import { TravelTransportModal } from "@/components/travel-transport-modal";
 import {
   addDaysToDateString,
@@ -91,6 +93,7 @@ export function TravelPlanWorkspace({
   const [draft, setDraft] = useState<TravelItineraryItem | { date: string; startHour: number } | null>(null);
   const [transportItemId, setTransportItemId] = useState<string | null>(null);
   const [editingDates, setEditingDates] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const sortedItems = useMemo(
     () => [...data.itinerary].sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour),
@@ -124,6 +127,9 @@ export function TravelPlanWorkspace({
           </div>
           <EventPresence code={data.event.shareCode} identityId={identityId} />
           <div className="flex shrink-0 items-center gap-2">
+            <button type="button" className="icon-button" onClick={() => setGuideOpen(true)} aria-label="打开 Travel plan 使用指南" title="使用指南">
+              <QuestionMarkIcon size={18} weight="bold" />
+            </button>
             <button type="button" className={`secondary-button ${data.event.isCreator ? "text-red-600 hover:border-red-200 hover:bg-red-50" : "text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"}`} onClick={data.event.isCreator ? onDelete : onLeave}>
               {data.event.isCreator ? <TrashIcon size={18} weight="bold" /> : <SignOutIcon size={18} weight="bold" />}
               <span className="hidden sm:inline">{data.event.isCreator ? "删除事件" : "退出事件"}</span>
@@ -360,6 +366,8 @@ export function TravelPlanWorkspace({
           }}
         />
       ) : null}
+
+      {guideOpen ? <TravelPlanGuide onClose={() => setGuideOpen(false)} /> : null}
     </main>
   );
 }
