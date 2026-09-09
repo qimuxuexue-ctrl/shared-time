@@ -187,10 +187,10 @@ export function TravelPlanWorkspace({
                     <div key={item.id}>
                       <button
                         type="button"
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${focusedItem?.id === item.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${focusedItem?.id === item.id ? "border-blue-300 bg-[#eaf3ff] text-blue-700 shadow-[0_4px_14px_rgba(59,130,246,0.08)]" : "border-blue-100 bg-[#f5f9fe] text-slate-600 hover:border-blue-200 hover:bg-[#eef5fc]"}`}
                         onClick={() => focusItem(item)}
                       >
-                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-xs font-bold ${focusedItem?.id === item.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{index + 1}</span>
+                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-xs font-bold ${focusedItem?.id === item.id ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-blue-100"}`}>{index + 1}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block break-words text-sm font-semibold">{item.title}</span>
                           <span className="mt-0.5 block break-words text-xs text-slate-400">{item.placeName}</span>
