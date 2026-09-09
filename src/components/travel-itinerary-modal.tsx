@@ -37,6 +37,8 @@ export function TravelItineraryModal({
   const [date, setDate] = useState(seed.date);
   const [startHour, setStartHour] = useState(seed.startHour);
   const [endHour, setEndHour] = useState(existing?.endHour ?? seed.startHour + 1);
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [note, setNote] = useState(existing?.note ?? "");
   const [query, setQuery] = useState(existing?.placeName ?? "");
   const [place, setPlace] = useState<PlaceResult | null>(existing ? {
     id: existing.id,
@@ -86,6 +88,8 @@ export function TravelItineraryModal({
           date,
           startHour,
           endHour,
+          title,
+          note,
           placeName: place.name,
           address: place.address,
           latitude: place.latitude,
@@ -123,7 +127,7 @@ export function TravelItineraryModal({
   return (
     <Modal title={existing ? "编辑行程" : "添加行程"} onClose={saving || deleting ? () => undefined : onClose}>
       <form className="space-y-5" onSubmit={save}>
-        <div className="grid grid-cols-[1fr_0.8fr_0.8fr] gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_0.8fr_0.8fr]">
           <div>
             <label htmlFor="trip-date" className="field-label">日期</label>
             <input id="trip-date" type="date" className="text-input" min={startDate} max={endDate} value={date} onChange={(event) => setDate(event.target.value)} />
@@ -143,6 +147,32 @@ export function TravelItineraryModal({
             <select id="trip-end" className="text-input" value={endHour} onChange={(event) => setEndHour(Number(event.target.value))}>
               {Array.from({ length: 24 - startHour }, (_, index) => startHour + index + 1).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}
             </select>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="trip-title" className="field-label">行程标题</label>
+            <input
+              id="trip-title"
+              className="text-input"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="例如 浅草寺参观"
+              maxLength={80}
+            />
+          </div>
+          <div>
+            <label htmlFor="trip-note" className="field-label">备注</label>
+            <textarea
+              id="trip-note"
+              className="text-input min-h-24 resize-y py-3 leading-6"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="例如 从雷门开始逛，结束后去附近吃午饭"
+              maxLength={300}
+            />
+            <p className="mt-1.5 text-right text-xs tabular-nums text-slate-400">{note.length}/300</p>
           </div>
         </div>
 
@@ -187,7 +217,7 @@ export function TravelItineraryModal({
 
         <div className={`grid gap-3 ${existing ? "grid-cols-[auto_1fr]" : "grid-cols-1"}`}>
           {existing ? <button type="button" className="secondary-button justify-center text-red-600 hover:border-red-200 hover:bg-red-50" disabled={saving || deleting} onClick={() => void remove()}><TrashIcon size={17} weight="bold" />{deleting ? "正在删除" : "删除"}</button> : null}
-          <button type="submit" className="primary-button w-full" disabled={saving || deleting || !place}>{saving ? "正在保存" : existing ? "保存修改" : "加入行程"}</button>
+          <button type="submit" className="primary-button w-full" disabled={saving || deleting || !place || !title.trim()}>{saving ? "正在保存" : existing ? "保存修改" : "加入行程"}</button>
         </div>
       </form>
     </Modal>

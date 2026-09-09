@@ -103,6 +103,8 @@ export type TravelItineraryItem = {
   date: string;
   startHour: number;
   endHour: number;
+  title: string;
+  note: string;
   placeName: string;
   address: string;
   latitude: number;

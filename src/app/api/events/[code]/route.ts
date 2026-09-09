@@ -142,7 +142,7 @@ export async function GET(
         .order("start_hour", { ascending: true }),
       supabaseAdmin
         .from("travel_itinerary_items")
-        .select("id, member_id, trip_date, start_hour, end_hour, place_name, address, latitude, longitude, created_at")
+        .select("id, member_id, trip_date, start_hour, end_hour, title, note, place_name, address, latitude, longitude, created_at")
         .eq("event_id", event.id)
         .order("trip_date", { ascending: true })
         .order("start_hour", { ascending: true }),
@@ -235,6 +235,8 @@ export async function GET(
             date: item.trip_date,
             startHour: item.start_hour,
             endHour: item.end_hour,
+            title: item.title,
+            note: item.note,
             placeName: item.place_name,
             address: item.address,
             latitude: item.latitude,

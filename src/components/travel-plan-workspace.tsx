@@ -170,8 +170,9 @@ export function TravelPlanWorkspace({
                     >
                       <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-xs font-bold ${focusedItem?.id === item.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{index + 1}</span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">{item.placeName}</span>
-                        <span className="block text-xs tabular-nums text-slate-400">{formatShortDate(item.date)} · {String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
+                        <span className="block break-words text-sm font-semibold">{item.title}</span>
+                        <span className="mt-0.5 block break-words text-xs text-slate-400">{item.placeName}</span>
+                        <span className="mt-0.5 block text-xs tabular-nums text-slate-400">{formatShortDate(item.date)} · {String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
                       </span>
                     </button>
                   ))}
@@ -247,15 +248,18 @@ export function TravelPlanWorkspace({
                               <button
                                 key={item.id}
                                 type="button"
-                                className={`block w-full overflow-hidden rounded-lg border px-2 py-1.5 text-left transition ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
+                                className={`flex w-full min-w-0 flex-col items-start rounded-lg border px-2.5 py-2 text-left transition ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   focusItem(item);
                                   setDraft(item);
                                 }}
                               >
-                                <span className="block truncate text-xs font-semibold">{item.placeName}</span>
-                                <span className="mt-0.5 block text-[10px] tabular-nums text-slate-500">{String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
+                                <span className="w-full whitespace-normal break-words text-sm font-semibold leading-5">{item.title}</span>
+                                {item.note ? (
+                                  <span className="mt-1 w-full whitespace-pre-wrap break-words text-[11px] leading-[1.45] text-slate-500">{item.note}</span>
+                                ) : null}
+                                <span className="mt-1.5 block text-[10px] tabular-nums text-slate-500">{String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
                               </button>
                             ))}
                           </div>

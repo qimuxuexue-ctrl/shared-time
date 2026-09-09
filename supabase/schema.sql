@@ -222,6 +222,8 @@ create table if not exists public.travel_itinerary_items (
   trip_date date not null,
   start_hour smallint not null,
   end_hour smallint not null,
+  title text not null,
+  note text not null default '',
   place_name text not null,
   address text not null default '',
   latitude double precision not null,
@@ -238,6 +240,8 @@ create table if not exists public.travel_itinerary_items (
     and end_hour > start_hour
   ),
   constraint travel_itinerary_items_place_name_length check (char_length(place_name) between 1 and 120),
+  constraint travel_itinerary_items_title_length check (char_length(title) between 1 and 80),
+  constraint travel_itinerary_items_note_length check (char_length(note) <= 300),
   constraint travel_itinerary_items_address_length check (char_length(address) <= 300),
   constraint travel_itinerary_items_latitude check (latitude between -90 and 90),
   constraint travel_itinerary_items_longitude check (longitude between -180 and 180)
