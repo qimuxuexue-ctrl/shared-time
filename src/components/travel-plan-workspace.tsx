@@ -18,7 +18,13 @@ import {
   UsersThreeIcon,
 } from "@phosphor-icons/react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { EventPresence } from "@/components/event-presence";
 import { Modal } from "@/components/modal";
@@ -39,6 +45,18 @@ import type {
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+
+type DragTarget = { date: string; startHour: number };
+
+type DragCandidate = {
+  item: TravelItineraryItem;
+  pointerId: number;
+  pointerType: string;
+  startX: number;
+  startY: number;
+  active: boolean;
+  timer: number | null;
+};
 
 function formatShortDate(dateString: string) {
   const [, month, day] = dateString.split("-");
@@ -95,6 +113,13 @@ export function TravelPlanWorkspace({
   const [editingDates, setEditingDates] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ item: TravelItineraryItem; x: number; y: number } | null>(null);
+  const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
+  const [movingItemId, setMovingItemId] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState("");
+  const dragCandidateRef = useRef<DragCandidate | null>(null);
+  const dragTargetRef = useRef<DragTarget | null>(null);
+  const suppressClickRef = useRef(false);
   const sortedItems = useMemo(
     () => [...data.itinerary].sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour),
     [data.itinerary],
@@ -108,6 +133,123 @@ export function TravelPlanWorkspace({
     setFocusedItemId(item.id);
     const itemWeek = getMondayDateString(item.date);
     if (itemWeek !== weekStart) onWeekChange(itemWeek);
+  };
+
+  useEffect(() => () => {
+    const candidate = dragCandidateRef.current;
+    if (candidate?.timer) window.clearTimeout(candidate.timer);
+  }, []);
+
+  const activateDrag = (candidate: DragCandidate, x: number, y: number) => {
+    candidate.active = true;
+    setDragPreview({ item: candidate.item, x, y });
+  };
+
+  const startDragging = (event: ReactPointerEvent<HTMLButtonElement>, item: TravelItineraryItem) => {
+    if (movingItemId || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const candidate: DragCandidate = {
+      item,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      timer: null,
+    };
+    if (event.pointerType !== "mouse") {
+      candidate.timer = window.setTimeout(() => activateDrag(candidate, event.clientX, event.clientY), 320);
+    }
+    dragCandidateRef.current = candidate;
+  };
+
+  const updateDragTarget = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const candidate = dragCandidateRef.current;
+    if (!candidate || candidate.pointerId !== event.pointerId) return;
+    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY);
+    if (!candidate.active && candidate.pointerType === "mouse" && distance > 4) {
+      activateDrag(candidate, event.clientX, event.clientY);
+    }
+    if (!candidate.active) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDragPreview({ item: candidate.item, x: event.clientX, y: event.clientY });
+
+    const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-trip-date][data-trip-hour]");
+    const startHour = Number(cell?.dataset.tripHour);
+    const duration = candidate.item.endHour - candidate.item.startHour;
+    const nextTarget = cell
+      && cell.dataset.tripLocked !== "true"
+      && Number.isInteger(startHour)
+      && startHour + duration <= 24
+      ? { date: cell.dataset.tripDate!, startHour }
+      : null;
+    dragTargetRef.current = nextTarget;
+    setDragTarget(nextTarget);
+  };
+
+  const moveItem = async (item: TravelItineraryItem, target: DragTarget) => {
+    if (item.date === target.date && item.startHour === target.startHour) return;
+    const duration = item.endHour - item.startHour;
+    setMovingItemId(item.id);
+    setMoveError("");
+    try {
+      const response = await fetch(`/api/events/${data.event.shareCode}/itinerary`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identityId,
+          itemId: item.id,
+          date: target.date,
+          startHour: target.startHour,
+          endHour: target.startHour + duration,
+        }),
+      });
+      const payload = (await response.json()) as { date?: string; startHour?: number; endHour?: number; error?: string };
+      if (!response.ok || !payload.date || payload.startHour === undefined || payload.endHour === undefined) {
+        throw new Error(payload.error ?? "移动行程失败");
+      }
+      onItineraryChange(data.itinerary.map((current) => current.id === item.id ? {
+        ...current,
+        date: payload.date!,
+        startHour: payload.startHour!,
+        endHour: payload.endHour!,
+      } : current));
+      setFocusedItemId(item.id);
+    } catch (caught) {
+      setMoveError(caught instanceof Error ? caught.message : "移动行程失败");
+    } finally {
+      setMovingItemId(null);
+    }
+  };
+
+  const finishDragging = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const candidate = dragCandidateRef.current;
+    if (!candidate || candidate.pointerId !== event.pointerId) return;
+    if (candidate.timer) window.clearTimeout(candidate.timer);
+    if (candidate.active) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickRef.current = true;
+      const target = dragTargetRef.current;
+      if (target) void moveItem(candidate.item, target);
+      window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+    }
+    dragCandidateRef.current = null;
+    dragTargetRef.current = null;
+    setDragPreview(null);
+    setDragTarget(null);
+  };
+
+  const cancelDragging = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const candidate = dragCandidateRef.current;
+    if (!candidate || candidate.pointerId !== event.pointerId) return;
+    if (candidate.timer) window.clearTimeout(candidate.timer);
+    dragCandidateRef.current = null;
+    dragTargetRef.current = null;
+    setDragPreview(null);
+    setDragTarget(null);
   };
 
   return (
@@ -249,6 +391,7 @@ export function TravelPlanWorkspace({
               <p className="text-sm font-semibold text-slate-800">旅行日历</p>
               <p className="text-xs text-slate-400">行程外日期已锁定</p>
             </div>
+            {moveError ? <p className="form-error mx-4 mt-3">{moveError}</p> : null}
             <div className="overflow-x-auto">
               <div className="min-w-[820px]">
                 <div className="grid grid-cols-[68px_repeat(7,minmax(96px,1fr))] border-b border-slate-200">
@@ -269,8 +412,11 @@ export function TravelPlanWorkspace({
                       return (
                         <div
                           key={`${date}-${hour}`}
+                          data-trip-date={date}
+                          data-trip-hour={hour}
+                          data-trip-locked={locked ? "true" : "false"}
                           aria-disabled={locked}
-                          className={`min-h-20 border-b border-l border-slate-100 p-1.5 ${locked ? "bg-slate-50/80" : "cursor-pointer bg-white transition hover:bg-blue-50/40"}`}
+                          className={`min-h-20 border-b border-l border-slate-100 p-1.5 ${locked ? "bg-slate-50/80" : dragTarget?.date === date && dragTarget.startHour === hour ? "cursor-pointer bg-blue-100/70 shadow-[inset_0_0_0_2px_rgba(59,130,246,0.55)]" : "cursor-pointer bg-white transition hover:bg-blue-50/40"}`}
                           role={locked ? undefined : "button"}
                           tabIndex={locked ? undefined : 0}
                           onClick={() => { if (!locked) setDraft({ date, startHour: hour }); }}
@@ -286,9 +432,14 @@ export function TravelPlanWorkspace({
                               <button
                                 key={item.id}
                                 type="button"
-                                className={`flex w-full min-w-0 flex-col items-start rounded-lg border px-2.5 py-2 text-left transition ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
+                                className={`flex w-full min-w-0 touch-none select-none flex-col items-start rounded-lg border px-2.5 py-2 text-left transition ${movingItemId === item.id ? "cursor-wait opacity-55" : dragPreview?.item.id === item.id ? "cursor-grabbing opacity-40" : "cursor-grab active:cursor-grabbing"} ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
+                                onPointerDown={(event) => startDragging(event, item)}
+                                onPointerMove={updateDragTarget}
+                                onPointerUp={finishDragging}
+                                onPointerCancel={cancelDragging}
                                 onClick={(event) => {
                                   event.stopPropagation();
+                                  if (suppressClickRef.current) return;
                                   focusItem(item);
                                   setDraft(item);
                                 }}
@@ -368,6 +519,13 @@ export function TravelPlanWorkspace({
       ) : null}
 
       {guideOpen ? <TravelPlanGuide onClose={() => setGuideOpen(false)} /> : null}
+
+      {dragPreview ? (
+        <div className="pointer-events-none fixed z-50 w-44 -translate-y-1/2 rounded-xl border border-blue-300 bg-white/95 px-3 py-2.5 shadow-[0_16px_40px_rgba(37,99,235,0.2)] backdrop-blur" style={{ left: dragPreview.x + 14, top: dragPreview.y }} aria-hidden="true">
+          <p className="truncate text-sm font-semibold text-slate-900">{dragPreview.item.title}</p>
+          <p className="mt-1 text-xs tabular-nums text-slate-500">{dragTarget ? `${formatShortDate(dragTarget.date)} · ${String(dragTarget.startHour).padStart(2, "0")}:00` : "移到可用时间格"}</p>
+        </div>
+      ) : null}
     </main>
   );
 }

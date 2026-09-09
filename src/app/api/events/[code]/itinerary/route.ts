@@ -38,6 +38,16 @@ const transportSchema = z.object({
   transportNote: z.string().trim().max(160).nullable(),
 });
 
+const moveSchema = z.object({
+  identityId: z.uuid("身份 ID 不正确"),
+  itemId: z.uuid("行程 ID 不正确"),
+  date: z.string().refine(isValidDateString, "行程日期不正确"),
+  startHour: z.number().int().min(10).max(23),
+  endHour: z.number().int().min(11).max(24),
+}).refine((value) => value.endHour > value.startHour, {
+  message: "结束时间必须晚于开始时间",
+});
+
 async function getContext(code: string, identityId: string) {
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
@@ -98,21 +108,54 @@ function mapItem(item: Record<string, unknown>, context: NonNullable<Awaited<Ret
 export async function PATCH(request: Request, route: RouteContext<"/api/events/[code]/itinerary">) {
   const { code: rawCode } = await route.params;
   const code = rawCode.trim().toUpperCase();
-  const parsed = transportSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return validationError(parsed.error);
+  const payload = await request.json().catch(() => null);
+  const transportUpdate = transportSchema.safeParse(payload);
+  const moveUpdate = moveSchema.safeParse(payload);
+  if (!transportUpdate.success && !moveUpdate.success) {
+    return validationError("date" in (payload ?? {}) ? moveUpdate.error : transportUpdate.error);
+  }
+  const identityId = moveUpdate.success
+    ? moveUpdate.data.identityId
+    : transportUpdate.success
+      ? transportUpdate.data.identityId
+      : "";
 
-  const context = await getContext(code, parsed.data.identityId);
-  const contextError = validateContext(context);
+  const context = await getContext(code, identityId);
+  const contextError = validateContext(context, moveUpdate.success ? moveUpdate.data.date : undefined);
   if (contextError || !context) return contextError!;
+
+  if (moveUpdate.success) {
+    const { data: item, error } = await supabaseAdmin
+      .from("travel_itinerary_items")
+      .update({
+        trip_date: moveUpdate.data.date,
+        start_hour: moveUpdate.data.startHour,
+        end_hour: moveUpdate.data.endHour,
+      })
+      .eq("id", moveUpdate.data.itemId)
+      .eq("event_id", context.event.id)
+      .select("id, trip_date, start_hour, end_hour")
+      .maybeSingle();
+    if (error) return serverError("移动行程失败，请稍后重试");
+    if (!item) return Response.json({ error: "找不到这条行程" }, { status: 404 });
+    return Response.json({
+      itemId: item.id,
+      date: item.trip_date,
+      startHour: item.start_hour,
+      endHour: item.end_hour,
+    });
+  }
+
+  if (!transportUpdate.success) return validationError(transportUpdate.error);
 
   const { data: item, error } = await supabaseAdmin
     .from("travel_itinerary_items")
     .update({
-      transport_mode: parsed.data.transportMode,
-      transport_duration_minutes: parsed.data.transportDurationMinutes,
-      transport_note: parsed.data.transportNote,
+      transport_mode: transportUpdate.data.transportMode,
+      transport_duration_minutes: transportUpdate.data.transportDurationMinutes,
+      transport_note: transportUpdate.data.transportNote,
     })
-    .eq("id", parsed.data.itemId)
+    .eq("id", transportUpdate.data.itemId)
     .eq("event_id", context.event.id)
     .select("id, transport_mode, transport_duration_minutes, transport_note")
     .maybeSingle();
