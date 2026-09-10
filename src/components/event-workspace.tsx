@@ -1699,26 +1699,38 @@ export function EventWorkspace({ code }: { code: string }) {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-slate-600">
-              <span aria-live="polite">
-                已选择 {pendingPeriods.length}/{weeklyOccurrenceCount} 次安排
-                {pendingPeriods.length === weeklyOccurrenceCount
-                  ? " · 可以统一确认"
-                  : ` · 还需选择 ${weeklyOccurrenceCount - pendingPeriods.length} 次`}
+          <div className={`mt-4 flex flex-col gap-3 rounded-2xl border p-3 transition sm:flex-row sm:items-center sm:justify-between sm:p-4 ${pendingPeriods.length === weeklyOccurrenceCount ? "border-blue-200 bg-[#eef5fc] shadow-[0_8px_24px_rgba(52,120,246,0.08)]" : "border-slate-200 bg-slate-50"}`}>
+            <div className="flex min-w-0 items-center gap-3" aria-live="polite">
+              <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${pendingPeriods.length === weeklyOccurrenceCount ? "bg-blue-600 text-white" : "bg-white text-slate-400 ring-1 ring-slate-200"}`}>
+                <CheckCircleIcon size={20} weight={pendingPeriods.length === weeklyOccurrenceCount ? "fill" : "bold"} />
               </span>
-              <div className="flex items-center gap-3">
-                {pendingPeriods.length > 0 ? (
-                  <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => setOccurrenceSelections(Array.from({ length: weeklyOccurrenceCount }, () => null))}>清空选择</button>
-                ) : null}
-                <button
-                  type="button"
-                  className="text-sm font-semibold text-blue-600 disabled:cursor-not-allowed disabled:text-slate-300"
-                  disabled={pendingPeriods.length !== weeklyOccurrenceCount}
-                  onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
-                >
-                  统一确认安排
-                </button>
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${pendingPeriods.length === weeklyOccurrenceCount ? "text-blue-800" : "text-slate-700"}`}>
+                  {pendingPeriods.length === weeklyOccurrenceCount
+                    ? `${weeklyOccurrenceCount} 次安排已选好`
+                    : `已选择 ${pendingPeriods.length}/${weeklyOccurrenceCount} 次安排`}
+                </p>
+                <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                  {pendingPeriods.length === weeklyOccurrenceCount
+                    ? "请确认所选时间，保存后所有参与者都能看到。"
+                    : `再选择 ${weeklyOccurrenceCount - pendingPeriods.length} 次时间后即可确认。`}
+                </p>
               </div>
+            </div>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              {pendingPeriods.length > 0 ? (
+                <button type="button" className="min-h-11 shrink-0 px-2 text-xs font-medium text-slate-500 transition hover:text-slate-800" onClick={() => setOccurrenceSelections(Array.from({ length: weeklyOccurrenceCount }, () => null))}>清空选择</button>
+              ) : null}
+              <button
+                type="button"
+                className="primary-button min-w-0 flex-1 whitespace-nowrap px-5 shadow-[0_8px_20px_rgba(52,120,246,0.2)] sm:flex-none disabled:shadow-none"
+                disabled={pendingPeriods.length !== weeklyOccurrenceCount}
+                onClick={() => openFinalPlan([...data.event.finalPeriods, ...pendingPeriods])}
+              >
+                <CheckCircleIcon size={18} weight="bold" />
+                确认所选安排
+              </button>
+            </div>
           </div>
 
           {visibleRecommendations.length > 0 ? (
