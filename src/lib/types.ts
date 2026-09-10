@@ -121,6 +121,7 @@ export type TravelStay = {
   checkInDate: string;
   checkOutDate: string;
   address: string;
+  hotelUrl: string;
   note: string;
 };
 

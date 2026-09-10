@@ -2,6 +2,7 @@
 
 import {
   ArrowLeftIcon,
+  ArrowSquareOutIcon,
   BedIcon,
   CaretLeftIcon,
   CaretRightIcon,
@@ -355,16 +356,20 @@ export function TravelPlanWorkspace({
           {data.stays.length ? (
             <div className="flex snap-x gap-3 overflow-x-auto px-4 py-4">
               {data.stays.map((stay, index) => (
-                <button key={stay.id} type="button" className="group min-w-[250px] max-w-[330px] flex-1 snap-start rounded-2xl border border-blue-100 bg-[#f5f9fe] p-4 text-left transition hover:border-blue-200 hover:bg-[#eef5fc] active:scale-[0.99]" onClick={() => setStayDraft(stay)}>
+                <article key={stay.id} className="group min-w-[250px] max-w-[330px] flex-1 snap-start rounded-2xl border border-blue-100 bg-[#f5f9fe] p-4 text-left transition hover:border-blue-200 hover:bg-[#eef5fc]">
                   <div className="flex items-start justify-between gap-3">
                     <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-blue-600 ring-1 ring-blue-100"><BedIcon size={17} weight="bold" /></span>
                     <span className="text-[11px] font-semibold text-slate-400">住宿 {index + 1}</span>
                   </div>
-                  <p className="mt-3 break-words text-base font-semibold leading-6 text-slate-900">{stay.name}</p>
+                  {stay.hotelUrl ? (
+                    <a href={stay.hotelUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex max-w-full items-center gap-1.5 break-words text-base font-semibold leading-6 text-slate-900 underline decoration-blue-200 underline-offset-4 transition hover:text-blue-600 hover:decoration-blue-500 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" title="打开酒店页面">
+                      <span className="min-w-0 break-words">{stay.name}</span><ArrowSquareOutIcon size={14} weight="bold" className="shrink-0 text-blue-500" />
+                    </a>
+                  ) : <p className="mt-3 break-words text-base font-semibold leading-6 text-slate-900">{stay.name}</p>}
                   <p className="mt-1 text-xs font-medium tabular-nums text-blue-600">{formatShortDate(stay.checkInDate)} 入住 · {formatShortDate(stay.checkOutDate)} 退房</p>
                   {stay.address ? <p className="mt-2 line-clamp-2 break-words text-xs leading-5 text-slate-500">{stay.address}</p> : <p className="mt-2 text-xs text-slate-400">点击补充地址和入住信息</p>}
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-400 transition group-hover:text-blue-600"><PencilSimpleIcon size={12} weight="bold" />编辑</span>
-                </button>
+                  <button type="button" className="mt-3 inline-flex items-center gap-1 rounded-md text-xs font-semibold text-slate-400 transition hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setStayDraft(stay)}><PencilSimpleIcon size={12} weight="bold" />编辑</button>
+                </article>
               ))}
               <button type="button" className="grid min-h-40 min-w-[180px] snap-start place-items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-5 text-sm font-semibold text-slate-400 transition hover:border-blue-200 hover:bg-blue-50/50 hover:text-blue-600" onClick={() => setStayDraft("new")}><span className="flex flex-col items-center gap-2"><span className="grid size-9 place-items-center rounded-full bg-white ring-1 ring-slate-200"><PlusIcon size={17} weight="bold" /></span>再添加一处住宿</span></button>
             </div>

@@ -20,6 +20,7 @@ export function TravelStayModal({ code, identityId, startDate, endDate, stay, on
   const [checkInDate, setCheckInDate] = useState(stay?.checkInDate ?? startDate);
   const [checkOutDate, setCheckOutDate] = useState(stay?.checkOutDate ?? endDate);
   const [address, setAddress] = useState(stay?.address ?? "");
+  const [hotelUrl, setHotelUrl] = useState(stay?.hotelUrl ?? "");
   const [note, setNote] = useState(stay?.note ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -32,7 +33,7 @@ export function TravelStayModal({ code, identityId, startDate, endDate, stay, on
       const response = await fetch(`/api/events/${code}/travel-details`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "stay", identityId, id: stay?.id, name, checkInDate, checkOutDate, address, note }),
+        body: JSON.stringify({ kind: "stay", identityId, id: stay?.id, name, checkInDate, checkOutDate, address, hotelUrl, note }),
       });
       const payload = await response.json() as { stay?: TravelStay; error?: string };
       if (!response.ok || !payload.stay) throw new Error(payload.error ?? "保存住宿失败");
@@ -81,6 +82,11 @@ export function TravelStayModal({ code, identityId, startDate, endDate, stay, on
       <div>
         <label htmlFor="stay-address" className="field-label">地址 <span className="font-normal text-slate-400">（选填）</span></label>
         <input id="stay-address" className="text-input" value={address} onChange={(event) => setAddress(event.target.value)} maxLength={240} placeholder="街道、车站或区域" />
+      </div>
+      <div>
+        <label htmlFor="stay-url" className="field-label">酒店页面链接 <span className="font-normal text-slate-400">（选填）</span></label>
+        <input id="stay-url" type="url" inputMode="url" className="text-input" value={hotelUrl} onChange={(event) => setHotelUrl(event.target.value)} maxLength={1000} placeholder="https://…" />
+        <p className="mt-1.5 text-xs leading-5 text-slate-400">可粘贴官网或预订页面，保存后点击住宿标题即可打开。</p>
       </div>
       <div>
         <label htmlFor="stay-note" className="field-label">住宿备注 <span className="font-normal text-slate-400">（选填）</span></label>

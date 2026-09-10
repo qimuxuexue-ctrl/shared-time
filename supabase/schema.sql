@@ -272,6 +272,7 @@ create table if not exists public.travel_stays (
   check_in_date date not null,
   check_out_date date not null,
   address text not null default '',
+  hotel_url text not null default '',
   note text not null default '',
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
@@ -280,6 +281,8 @@ create table if not exists public.travel_stays (
   constraint travel_stays_date_order check (check_out_date >= check_in_date),
   constraint travel_stays_name_length check (char_length(name) between 1 and 100),
   constraint travel_stays_address_length check (char_length(address) <= 240),
+  constraint travel_stays_hotel_url_length check (char_length(hotel_url) <= 1000),
+  constraint travel_stays_hotel_url_format check (hotel_url = '' or hotel_url ~* '^https?://'),
   constraint travel_stays_note_length check (char_length(note) <= 300)
 );
 
