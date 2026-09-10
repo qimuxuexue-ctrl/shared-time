@@ -48,7 +48,7 @@ create table if not exists public.events (
   constraint events_workspace_kind_values check (workspace_kind in ('share_time', 'travel_plan')),
   constraint events_date_range check (end_date is null or end_date >= start_date),
   constraint events_event_type_values check (event_type in ('one_time', 'ongoing')),
-  constraint events_time_zone_values check (time_zone in ('Asia/Shanghai', 'Asia/Tokyo')),
+  constraint events_time_zone_values check (time_zone in ('Asia/Bangkok', 'Asia/Shanghai', 'Asia/Tokyo')),
   constraint events_final_time_complete check (
     (final_date is null and final_start_hour is null and finalized_at is null)
     or
@@ -102,7 +102,7 @@ alter table public.events
 
 alter table public.events
   add constraint events_time_zone_values
-  check (time_zone in ('Asia/Shanghai', 'Asia/Tokyo'));
+  check (time_zone in ('Asia/Bangkok', 'Asia/Shanghai', 'Asia/Tokyo'));
 
 alter table public.events
   drop constraint if exists events_final_time_complete;

@@ -1,6 +1,7 @@
 import type { EventTimeZone } from "@/lib/types";
 
 const TIME_ZONE_OFFSETS: Record<EventTimeZone, string> = {
+  "Asia/Bangkok": "+07:00",
   "Asia/Shanghai": "+08:00",
   "Asia/Tokyo": "+09:00",
 };
@@ -10,6 +11,11 @@ export const EVENT_TIME_ZONE_OPTIONS: Array<{
   label: string;
   shortLabel: string;
 }> = [
+  {
+    value: "Asia/Bangkok",
+    label: "曼谷时间 UTC+7",
+    shortLabel: "曼谷 UTC+7",
+  },
   {
     value: "Asia/Shanghai",
     label: "北京时间 UTC+8",

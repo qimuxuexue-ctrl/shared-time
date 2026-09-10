@@ -24,7 +24,7 @@ const createEventSchema = z
     eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
     startDate: z.string().refine(isValidDateString, "开始日期不正确").optional(),
     endDate: z.string().refine(isValidDateString, "结束日期不正确").optional(),
-    timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]).default("Asia/Shanghai"),
+    timeZone: z.enum(["Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo"]).default("Asia/Shanghai"),
   })
   .superRefine((value, context) => {
     if (value.workspaceKind !== "travel_plan") return;

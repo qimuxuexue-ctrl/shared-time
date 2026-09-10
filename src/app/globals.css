@@ -82,6 +82,23 @@ button:disabled {
   transform: scale(1.08);
 }
 
+.leaflet-tooltip.travel-route-transport-tooltip {
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 94%);
+  padding: 4px 7px;
+  color: #315f9f;
+  box-shadow: 0 5px 14px rgb(51 65 85 / 14%);
+  font-family: var(--font-geist-sans), "PingFang SC", sans-serif;
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.leaflet-tooltip.travel-route-transport-tooltip::before {
+  display: none;
+}
+
 @layer components {
   .primary-button {
     display: inline-flex;

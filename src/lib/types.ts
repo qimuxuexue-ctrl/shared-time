@@ -7,7 +7,7 @@ export type EventType = "one_time" | "ongoing";
 
 export type WorkspaceKind = "share_time" | "travel_plan";
 
-export type EventTimeZone = "Asia/Shanghai" | "Asia/Tokyo";
+export type EventTimeZone = "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
 
 export type EventUpdateType =
   | "participant"

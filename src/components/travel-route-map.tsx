@@ -73,6 +73,28 @@ export function TravelRouteMap({
         marker.on("click", () => onSelectRef.current(item.id));
       });
 
+      items.slice(0, -1).forEach((item, index) => {
+        if (!item.transportMode) return;
+        const nextItem = items[index + 1];
+        const midpoint: [number, number] = [
+          (item.latitude + nextItem.latitude) / 2,
+          (item.longitude + nextItem.longitude) / 2,
+        ];
+        const anchor = L.circleMarker(midpoint, {
+          radius: 1,
+          opacity: 0,
+          fillOpacity: 0,
+          interactive: false,
+        }).addTo(map);
+        const label = document.createElement("span");
+        label.textContent = `${item.transportMode}${item.transportDurationMinutes ? ` · ${item.transportDurationMinutes} 分钟` : ""}`;
+        anchor.bindTooltip(label, {
+          permanent: true,
+          direction: "center",
+          className: "travel-route-transport-tooltip",
+        }).openTooltip();
+      });
+
       window.requestAnimationFrame(() => map.invalidateSize());
     });
 

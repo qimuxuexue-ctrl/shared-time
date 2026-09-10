@@ -72,6 +72,12 @@ function formatRange(startDate: string, endDate: string) {
     : `${startYear}年${startMonth}月${startDay}日 – ${endYear}年${endMonth}月${endDay}日`;
 }
 
+function getTripDayNumber(startDate: string, date: string) {
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const current = Date.parse(`${date}T00:00:00Z`);
+  return Math.floor((current - start) / 86_400_000) + 1;
+}
+
 export function TravelPlanWorkspace({
   data,
   identityId,
@@ -332,7 +338,7 @@ export function TravelPlanWorkspace({
               <div className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><MapPinIcon size={18} weight="bold" />旅行地图</div>
                 <div className="flex rounded-lg bg-slate-100 p-1 text-[11px] font-semibold">
-                  <button type="button" className={`rounded-md px-2 py-1 transition ${mapMode === "point" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setMapMode("point")}>单点</button>
+                  <button type="button" className={`rounded-md px-2 py-1 transition ${mapMode === "point" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setMapMode("point")}>地点查看</button>
                   <button type="button" className={`rounded-md px-2 py-1 transition ${mapMode === "route" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setMapMode("route")}>当天路线</button>
                 </div>
               </div>
@@ -442,8 +448,10 @@ export function TravelPlanWorkspace({
                   <div />
                   {dates.map((date, index) => {
                     const locked = date < data.event.startDate || date > endDate;
-                    return <div key={date} className={`border-l border-slate-200 px-2 py-4 text-center ${locked ? "bg-slate-50 text-slate-300" : "text-slate-700"}`}>
+                    const tripDay = locked ? null : getTripDayNumber(data.event.startDate, date);
+                    return <div key={date} className={`border-l border-slate-200 px-2 py-3 text-center ${locked ? "bg-slate-50 text-slate-300" : "text-slate-700"}`}>
                       <div className="flex items-center justify-center gap-1.5 text-sm font-semibold">{DAY_NAMES[index]} <span className="font-normal text-slate-400">{formatShortDate(date)}</span>{locked ? <LockSimpleIcon size={12} weight="bold" /> : null}</div>
+                      {tripDay ? <span className="mt-1.5 inline-flex rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">旅行第 {tripDay} 天</span> : null}
                     </div>;
                   })}
                 </div>

@@ -200,7 +200,7 @@ export function UsageGuide({ onClose }: { onClose: () => void }) {
             <GuideTip
               icon={<ClockIcon size={18} weight="duotone" />}
               title="事件时区"
-              body="创建时可选择北京时间或东京时间，创建者之后仍可修改。"
+              body="创建时可选择曼谷、北京或东京时间，创建者之后仍可修改。"
             />
             <GuideTip
               icon={<ShareNetworkIcon size={18} weight="duotone" />}

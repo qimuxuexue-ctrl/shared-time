@@ -41,7 +41,7 @@ type EventRow = {
   creator_identity_id: string;
   start_date: string;
   event_type: "one_time" | "ongoing";
-  time_zone: "Asia/Shanghai" | "Asia/Tokyo";
+  time_zone: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
   final_date: string | null;
   status: "active" | "closed" | "archived";
 };

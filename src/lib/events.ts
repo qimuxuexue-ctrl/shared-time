@@ -20,7 +20,7 @@ type JoinedEvent = {
   weeks_ahead: number;
   workspace_kind: "share_time" | "travel_plan";
   event_type: "one_time" | "ongoing";
-  time_zone: "Asia/Shanghai" | "Asia/Tokyo";
+  time_zone: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
   final_date: string | null;
   final_start_hour: number | null;
   finalized_at: string | null;
@@ -84,7 +84,7 @@ export function pickTagColor(identityId: string) {
 export function isExpiredOneTimeEvent(event: {
   event_type: "one_time" | "ongoing";
   start_date: string;
-  time_zone?: "Asia/Shanghai" | "Asia/Tokyo";
+  time_zone?: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
 }) {
   return (
     event.event_type === "one_time" &&

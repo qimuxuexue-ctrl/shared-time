@@ -28,7 +28,7 @@ const deleteSchema = z.object({
 
 const updateTimeZoneSchema = z.object({
   identityId: z.uuid("身份 ID 不正确"),
-  timeZone: z.enum(["Asia/Shanghai", "Asia/Tokyo"]),
+  timeZone: z.enum(["Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo"]),
 });
 
 const updateTravelDatesSchema = z.object({
@@ -359,7 +359,7 @@ export async function PATCH(
     .eq("id", event.id)
     .eq("creator_identity_id", identityId)
     .select("time_zone")
-    .single<{ time_zone: "Asia/Shanghai" | "Asia/Tokyo" }>();
+    .single<{ time_zone: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo" }>();
 
   if (updateError || !updatedEvent) {
     return serverError("修改时区失败，请稍后重试");
