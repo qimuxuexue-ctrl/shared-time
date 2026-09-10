@@ -28,6 +28,11 @@ body {
     "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
+.app-date-picker {
+  font-family: var(--font-geist-sans), "Microsoft YaHei UI", "Microsoft YaHei",
+    "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
+
 button,
 input,
 select {

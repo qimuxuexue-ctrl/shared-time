@@ -120,6 +120,8 @@ export type TravelStay = {
   name: string;
   checkInDate: string;
   checkOutDate: string;
+  checkInTime: string;
+  checkOutTime: string;
   address: string;
   hotelUrl: string;
   note: string;

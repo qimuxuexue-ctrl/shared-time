@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/modal";
+import { DatePicker } from "@/components/date-picker";
 import { DeleteEventModal } from "@/components/delete-event-modal";
 import { LoadingScreen } from "@/components/loading-screen";
 import { UsageGuide } from "@/components/usage-guide";
@@ -717,17 +718,17 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           <div>
             <span className="field-label">旅行日期</span>
             <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs font-medium text-slate-500">
-                开始
-                <input type="date" className="text-input mt-1" value={startDate} onChange={(event) => {
-                  setStartDate(event.target.value);
-                  if (endDate < event.target.value) setEndDate(event.target.value);
+              <div className="text-xs font-medium text-slate-500">
+                <span>开始</span>
+                <DatePicker value={startDate} ariaLabel="旅行开始日期" onChange={(value) => {
+                  setStartDate(value);
+                  if (endDate < value) setEndDate(value);
                 }} />
-              </label>
-              <label className="text-xs font-medium text-slate-500">
-                结束
-                <input type="date" className="text-input mt-1" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-              </label>
+              </div>
+              <div className="text-xs font-medium text-slate-500">
+                <span>结束</span>
+                <DatePicker value={endDate} min={startDate} align="right" ariaLabel="旅行结束日期" onChange={setEndDate} />
+              </div>
             </div>
             <p className="mt-2 text-xs leading-5 text-slate-500">
               日历按周一开始展示，旅行日期之外的时间会锁定。

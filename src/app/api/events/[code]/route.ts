@@ -158,7 +158,7 @@ export async function GET(
         .order("start_hour", { ascending: true }),
       supabaseAdmin
         .from("travel_stays")
-        .select("id, name, check_in_date, check_out_date, address, hotel_url, note")
+        .select("id, name, check_in_date, check_out_date, check_in_time, check_out_time, address, hotel_url, note")
         .eq("event_id", event.id)
         .order("check_in_date", { ascending: true }),
       supabaseAdmin
@@ -273,6 +273,8 @@ export async function GET(
       name: stay.name,
       checkInDate: stay.check_in_date,
       checkOutDate: stay.check_out_date,
+      checkInTime: stay.check_in_time,
+      checkOutTime: stay.check_out_time,
       address: stay.address,
       hotelUrl: stay.hotel_url,
       note: stay.note,

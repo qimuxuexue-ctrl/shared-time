@@ -14,6 +14,8 @@ const staySchema = baseSchema.extend({
   name: z.string().trim().min(1, "请输入住宿名称").max(100),
   checkInDate: z.string().refine(isValidDateString, "入住日期不正确"),
   checkOutDate: z.string().refine(isValidDateString, "退房日期不正确"),
+  checkInTime: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "入住时间不正确").default(""),
+  checkOutTime: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "退房时间不正确").default(""),
   address: z.string().trim().max(240).default(""),
   hotelUrl: z.string().trim().max(1000, "酒店页面链接过长").refine((value) => !value || /^https?:\/\//i.test(value), "请输入以 http:// 或 https:// 开头的链接").default(""),
   note: z.string().trim().max(300).default(""),
@@ -65,7 +67,7 @@ function contextError(context: Awaited<ReturnType<typeof getContext>>) {
 }
 
 function mapStay(row: Record<string, unknown>) {
-  return { id: row.id, name: row.name, checkInDate: row.check_in_date, checkOutDate: row.check_out_date, address: row.address, hotelUrl: row.hotel_url, note: row.note };
+  return { id: row.id, name: row.name, checkInDate: row.check_in_date, checkOutDate: row.check_out_date, checkInTime: row.check_in_time, checkOutTime: row.check_out_time, address: row.address, hotelUrl: row.hotel_url, note: row.note };
 }
 
 function mapJourney(row: Record<string, unknown>) {
@@ -90,7 +92,7 @@ export async function PUT(request: Request, route: RouteContext<"/api/events/[co
     if (data.checkInDate < context.event.start_date || data.checkOutDate > context.event.end_date) {
       return Response.json({ error: "住宿日期必须在旅行日期内" }, { status: 400 });
     }
-    const values = { event_id: context.event.id, member_id: context.member.id, name: data.name, check_in_date: data.checkInDate, check_out_date: data.checkOutDate, address: data.address, hotel_url: data.hotelUrl, note: data.note };
+    const values = { event_id: context.event.id, member_id: context.member.id, name: data.name, check_in_date: data.checkInDate, check_out_date: data.checkOutDate, check_in_time: data.checkInTime, check_out_time: data.checkOutTime, address: data.address, hotel_url: data.hotelUrl, note: data.note };
     const query = data.id
       ? supabaseAdmin.from("travel_stays").update(values).eq("id", data.id).eq("event_id", context.event.id)
       : supabaseAdmin.from("travel_stays").insert(values);

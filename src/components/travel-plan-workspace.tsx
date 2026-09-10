@@ -366,7 +366,7 @@ export function TravelPlanWorkspace({
                       <span className="min-w-0 break-words">{stay.name}</span><ArrowSquareOutIcon size={14} weight="bold" className="shrink-0 text-blue-500" />
                     </a>
                   ) : <p className="mt-3 break-words text-base font-semibold leading-6 text-slate-900">{stay.name}</p>}
-                  <p className="mt-1 text-xs font-medium tabular-nums text-blue-600">{formatShortDate(stay.checkInDate)} 入住 · {formatShortDate(stay.checkOutDate)} 退房</p>
+                  <p className="mt-1 text-xs font-medium tabular-nums text-blue-600">{formatShortDate(stay.checkInDate)}{stay.checkInTime ? ` ${stay.checkInTime}` : ""} 入住 · {formatShortDate(stay.checkOutDate)}{stay.checkOutTime ? ` ${stay.checkOutTime}` : ""} 退房</p>
                   {stay.address ? <p className="mt-2 line-clamp-2 break-words text-xs leading-5 text-slate-500">{stay.address}</p> : <p className="mt-2 text-xs text-slate-400">点击补充地址和入住信息</p>}
                   <button type="button" className="mt-3 inline-flex items-center gap-1 rounded-md text-xs font-semibold text-slate-400 transition hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setStayDraft(stay)}><PencilSimpleIcon size={12} weight="bold" />编辑</button>
                 </article>

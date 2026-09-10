@@ -271,6 +271,8 @@ create table if not exists public.travel_stays (
   name text not null,
   check_in_date date not null,
   check_out_date date not null,
+  check_in_time text not null default '',
+  check_out_time text not null default '',
   address text not null default '',
   hotel_url text not null default '',
   note text not null default '',
@@ -279,6 +281,8 @@ create table if not exists public.travel_stays (
   constraint travel_stays_member_event_fk foreign key (member_id, event_id)
     references public.event_members(id, event_id) on delete cascade,
   constraint travel_stays_date_order check (check_out_date >= check_in_date),
+  constraint travel_stays_check_in_time_format check (check_in_time = '' or check_in_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+  constraint travel_stays_check_out_time_format check (check_out_time = '' or check_out_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
   constraint travel_stays_name_length check (char_length(name) between 1 and 100),
   constraint travel_stays_address_length check (char_length(address) <= 240),
   constraint travel_stays_hotel_url_length check (char_length(hotel_url) <= 1000),

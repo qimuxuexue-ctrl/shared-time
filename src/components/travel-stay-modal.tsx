@@ -19,6 +19,8 @@ export function TravelStayModal({ code, identityId, startDate, endDate, stay, on
   const [name, setName] = useState(stay?.name ?? "");
   const [checkInDate, setCheckInDate] = useState(stay?.checkInDate ?? startDate);
   const [checkOutDate, setCheckOutDate] = useState(stay?.checkOutDate ?? endDate);
+  const [checkInTime, setCheckInTime] = useState(stay?.checkInTime ?? "");
+  const [checkOutTime, setCheckOutTime] = useState(stay?.checkOutTime ?? "");
   const [address, setAddress] = useState(stay?.address ?? "");
   const [hotelUrl, setHotelUrl] = useState(stay?.hotelUrl ?? "");
   const [note, setNote] = useState(stay?.note ?? "");
@@ -33,7 +35,7 @@ export function TravelStayModal({ code, identityId, startDate, endDate, stay, on
       const response = await fetch(`/api/events/${code}/travel-details`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "stay", identityId, id: stay?.id, name, checkInDate, checkOutDate, address, hotelUrl, note }),
+        body: JSON.stringify({ kind: "stay", identityId, id: stay?.id, name, checkInDate, checkOutDate, checkInTime, checkOutTime, address, hotelUrl, note }),
       });
       const payload = await response.json() as { stay?: TravelStay; error?: string };
       if (!response.ok || !payload.stay) throw new Error(payload.error ?? "保存住宿失败");
@@ -77,6 +79,16 @@ export function TravelStayModal({ code, identityId, startDate, endDate, stay, on
         <div>
           <label htmlFor="stay-check-out" className="field-label">退房日期</label>
           <input id="stay-check-out" type="date" className="text-input" min={checkInDate} max={endDate} value={checkOutDate} onChange={(event) => setCheckOutDate(event.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="stay-check-in-time" className="field-label">入住时间 <span className="font-normal text-slate-400">（选填）</span></label>
+          <input id="stay-check-in-time" type="time" className="text-input tabular-nums" value={checkInTime} onChange={(event) => setCheckInTime(event.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="stay-check-out-time" className="field-label">退房时间 <span className="font-normal text-slate-400">（选填）</span></label>
+          <input id="stay-check-out-time" type="time" className="text-input tabular-nums" value={checkOutTime} onChange={(event) => setCheckOutTime(event.target.value)} />
         </div>
       </div>
       <div>
