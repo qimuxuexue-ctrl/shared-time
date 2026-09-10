@@ -2,6 +2,7 @@
 
 import {
   ArrowLeftIcon,
+  BedIcon,
   CaretLeftIcon,
   CaretRightIcon,
   CheckIcon,
@@ -10,6 +11,7 @@ import {
   HashIcon,
   LockSimpleIcon,
   MapPinIcon,
+  NavigationArrowIcon,
   PencilSimpleIcon,
   PlusIcon,
   QuestionMarkIcon,
@@ -29,8 +31,10 @@ import {
 import { EventPresence } from "@/components/event-presence";
 import { Modal } from "@/components/modal";
 import { TravelItineraryModal } from "@/components/travel-itinerary-modal";
+import { TravelJourneyModal } from "@/components/travel-journey-modal";
 import { TravelPlanGuide } from "@/components/travel-plan-guide";
 import { TravelRouteMap } from "@/components/travel-route-map";
+import { TravelStayModal } from "@/components/travel-stay-modal";
 import { TravelTransportModal } from "@/components/travel-transport-modal";
 import {
   addDaysToDateString,
@@ -42,6 +46,8 @@ import type {
   EventTimeZone,
   EventWorkspaceData,
   TravelItineraryItem,
+  TravelJourney,
+  TravelStay,
 } from "@/lib/types";
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
@@ -93,6 +99,8 @@ export function TravelPlanWorkspace({
   onTimeZoneChange,
   onTravelDatesChange,
   onItineraryChange,
+  onStaysChange,
+  onJourneysChange,
 }: {
   data: EventWorkspaceData;
   identityId: string;
@@ -108,6 +116,8 @@ export function TravelPlanWorkspace({
   onTimeZoneChange: (timeZone: EventTimeZone) => void;
   onTravelDatesChange: (startDate: string, endDate: string) => Promise<void>;
   onItineraryChange: (items: TravelItineraryItem[]) => void;
+  onStaysChange: (stays: TravelStay[]) => void;
+  onJourneysChange: (journeys: TravelJourney[]) => void;
 }) {
   const endDate = data.event.endDate ?? data.event.startDate;
   const firstWeek = getMondayDateString(data.event.startDate);
@@ -117,6 +127,8 @@ export function TravelPlanWorkspace({
   );
   const [draft, setDraft] = useState<TravelItineraryItem | { date: string; startHour: number } | null>(null);
   const [transportItemId, setTransportItemId] = useState<string | null>(null);
+  const [stayDraft, setStayDraft] = useState<TravelStay | "new" | null>(null);
+  const [journeyDirection, setJourneyDirection] = useState<"outbound" | "return" | null>(null);
   const [editingDates, setEditingDates] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
@@ -332,8 +344,62 @@ export function TravelPlanWorkspace({
           </div>
         </section>
 
+        <section className="mb-5 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white">
+          <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><BedIcon size={18} weight="bold" />住宿安排</h2>
+              <p className="mt-1 text-xs text-slate-400">集中记录酒店、民宿和入住日期。</p>
+            </div>
+            <button type="button" className="secondary-button self-start sm:self-auto" onClick={() => setStayDraft("new")}><PlusIcon size={17} weight="bold" />添加住宿</button>
+          </div>
+          {data.stays.length ? (
+            <div className="flex snap-x gap-3 overflow-x-auto px-4 py-4">
+              {data.stays.map((stay, index) => (
+                <button key={stay.id} type="button" className="group min-w-[250px] max-w-[330px] flex-1 snap-start rounded-2xl border border-blue-100 bg-[#f5f9fe] p-4 text-left transition hover:border-blue-200 hover:bg-[#eef5fc] active:scale-[0.99]" onClick={() => setStayDraft(stay)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-blue-600 ring-1 ring-blue-100"><BedIcon size={17} weight="bold" /></span>
+                    <span className="text-[11px] font-semibold text-slate-400">住宿 {index + 1}</span>
+                  </div>
+                  <p className="mt-3 break-words text-base font-semibold leading-6 text-slate-900">{stay.name}</p>
+                  <p className="mt-1 text-xs font-medium tabular-nums text-blue-600">{formatShortDate(stay.checkInDate)} 入住 · {formatShortDate(stay.checkOutDate)} 退房</p>
+                  {stay.address ? <p className="mt-2 line-clamp-2 break-words text-xs leading-5 text-slate-500">{stay.address}</p> : <p className="mt-2 text-xs text-slate-400">点击补充地址和入住信息</p>}
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-400 transition group-hover:text-blue-600"><PencilSimpleIcon size={12} weight="bold" />编辑</span>
+                </button>
+              ))}
+              <button type="button" className="grid min-h-40 min-w-[180px] snap-start place-items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-5 text-sm font-semibold text-slate-400 transition hover:border-blue-200 hover:bg-blue-50/50 hover:text-blue-600" onClick={() => setStayDraft("new")}><span className="flex flex-col items-center gap-2"><span className="grid size-9 place-items-center rounded-full bg-white ring-1 ring-slate-200"><PlusIcon size={17} weight="bold" /></span>再添加一处住宿</span></button>
+            </div>
+          ) : (
+            <button type="button" className="m-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl border border-dashed border-blue-200 bg-[#f7faff] px-4 py-4 text-left transition hover:bg-blue-50 active:scale-[0.995]" onClick={() => setStayDraft("new")}>
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-blue-600 ring-1 ring-blue-100"><PlusIcon size={18} weight="bold" /></span>
+              <span><span className="block text-sm font-semibold text-slate-700">添加第一处住宿</span><span className="mt-1 block text-xs text-slate-400">填写酒店名称、入住与退房日期</span></span>
+            </button>
+          )}
+        </section>
+
         <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-5">
+            <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
+              <div className="mb-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><NavigationArrowIcon size={18} weight="bold" />出发与返程</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-400">记录抵达目的地和回程的大交通。</p>
+              </div>
+              <div className="space-y-2">
+                {(["outbound", "return"] as const).map((direction) => {
+                  const journey = data.journeys.find((item) => item.direction === direction);
+                  const label = direction === "outbound" ? "去程" : "返程";
+                  return journey ? (
+                    <button key={direction} type="button" className="group w-full rounded-xl border border-blue-100 bg-[#f5f9fe] p-3 text-left transition hover:border-blue-200 hover:bg-[#eef5fc]" onClick={() => setJourneyDirection(direction)}>
+                      <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-blue-600">{label} · {journey.mode}</span><PencilSimpleIcon size={13} weight="bold" className="text-slate-300 group-hover:text-blue-500" /></div>
+                      <p className="mt-1.5 flex items-center gap-1.5 break-words text-sm font-semibold text-slate-800"><span>{journey.origin}</span><span className="text-slate-300">→</span><span>{journey.destination}</span></p>
+                      <p className="mt-1 text-xs tabular-nums text-slate-400">{formatShortDate(journey.date)}{journey.departureTime ? ` · ${journey.departureTime}` : ""}{journey.arrivalTime ? `–${journey.arrivalTime}` : ""}{journey.reference ? ` · ${journey.reference}` : ""}</p>
+                    </button>
+                  ) : (
+                    <button key={direction} type="button" className="flex w-full items-center gap-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-left text-sm font-semibold text-slate-500 transition hover:border-blue-200 hover:bg-blue-50/60 hover:text-blue-600" onClick={() => setJourneyDirection(direction)}><span className="grid size-7 place-items-center rounded-full bg-white ring-1 ring-slate-200"><PlusIcon size={14} weight="bold" /></span>添加{label}</button>
+                  );
+                })}
+              </div>
+            </section>
+
             <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white">
               <div className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><MapPinIcon size={18} weight="bold" />旅行地图</div>
@@ -556,6 +622,29 @@ export function TravelPlanWorkspace({
           />
         ) : null;
       })() : null}
+
+      {stayDraft ? <TravelStayModal
+        code={data.event.shareCode}
+        identityId={identityId}
+        startDate={data.event.startDate}
+        endDate={endDate}
+        stay={stayDraft === "new" ? undefined : stayDraft}
+        onClose={() => setStayDraft(null)}
+        onSaved={(stay) => { onStaysChange([...data.stays.filter((item) => item.id !== stay.id), stay].sort((a, b) => a.checkInDate.localeCompare(b.checkInDate))); setStayDraft(null); }}
+        onDeleted={(id) => { onStaysChange(data.stays.filter((item) => item.id !== id)); setStayDraft(null); }}
+      /> : null}
+
+      {journeyDirection ? <TravelJourneyModal
+        code={data.event.shareCode}
+        identityId={identityId}
+        direction={journeyDirection}
+        startDate={data.event.startDate}
+        endDate={endDate}
+        journey={data.journeys.find((item) => item.direction === journeyDirection)}
+        onClose={() => setJourneyDirection(null)}
+        onSaved={(journey) => { onJourneysChange([...data.journeys.filter((item) => item.direction !== journey.direction), journey]); setJourneyDirection(null); }}
+        onDeleted={(id) => { onJourneysChange(data.journeys.filter((item) => item.id !== id)); setJourneyDirection(null); }}
+      /> : null}
 
       {editingDates ? (
         <TravelDateRangeModal

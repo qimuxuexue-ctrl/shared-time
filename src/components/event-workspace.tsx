@@ -1370,6 +1370,22 @@ export function EventWorkspace({ code }: { code: string }) {
               return next;
             });
           }}
+          onStaysChange={(stays) => {
+            setData((current) => {
+              if (!current) return current;
+              const next = { ...current, stays };
+              dataRef.current = next;
+              return next;
+            });
+          }}
+          onJourneysChange={(journeys) => {
+            setData((current) => {
+              if (!current) return current;
+              const next = { ...current, journeys };
+              dataRef.current = next;
+              return next;
+            });
+          }}
         />
 
         {showDeleteConfirm ? (

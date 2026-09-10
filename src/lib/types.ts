@@ -115,6 +115,28 @@ export type TravelItineraryItem = {
   createdAt: string;
 };
 
+export type TravelStay = {
+  id: string;
+  name: string;
+  checkInDate: string;
+  checkOutDate: string;
+  address: string;
+  note: string;
+};
+
+export type TravelJourney = {
+  id: string;
+  direction: "outbound" | "return";
+  mode: string;
+  date: string;
+  departureTime: string;
+  arrivalTime: string;
+  origin: string;
+  destination: string;
+  reference: string;
+  note: string;
+};
+
 export type EventWorkspaceData = {
   event: {
     id: string;
@@ -138,5 +160,7 @@ export type EventWorkspaceData = {
   members: EventMember[];
   notes: EventNote[];
   itinerary: TravelItineraryItem[];
+  stays: TravelStay[];
+  journeys: TravelJourney[];
   availability: AvailabilitySlot[];
 };

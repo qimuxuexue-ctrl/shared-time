@@ -124,6 +124,8 @@ export async function GET(
     { data: notes, error: notesError },
     { data: finalPeriods },
     { data: itinerary, error: itineraryError },
+    { data: stays, error: staysError },
+    { data: journeys, error: journeysError },
   ] =
     await Promise.all([
       supabaseAdmin
@@ -154,9 +156,19 @@ export async function GET(
         .eq("event_id", event.id)
         .order("trip_date", { ascending: true })
         .order("start_hour", { ascending: true }),
+      supabaseAdmin
+        .from("travel_stays")
+        .select("id, name, check_in_date, check_out_date, address, note")
+        .eq("event_id", event.id)
+        .order("check_in_date", { ascending: true }),
+      supabaseAdmin
+        .from("travel_journeys")
+        .select("id, direction, mode, journey_date, departure_time, arrival_time, origin, destination, reference, note")
+        .eq("event_id", event.id)
+        .order("journey_date", { ascending: true }),
     ]);
 
-  if (membersError || slotsError || notesError || itineraryError) {
+  if (membersError || slotsError || notesError || itineraryError || staysError || journeysError) {
     return serverError();
   }
 
@@ -256,6 +268,26 @@ export async function GET(
           }]
         : [];
     }),
+    stays: (stays ?? []).map((stay) => ({
+      id: stay.id,
+      name: stay.name,
+      checkInDate: stay.check_in_date,
+      checkOutDate: stay.check_out_date,
+      address: stay.address,
+      note: stay.note,
+    })),
+    journeys: (journeys ?? []).map((journey) => ({
+      id: journey.id,
+      direction: journey.direction,
+      mode: journey.mode,
+      date: journey.journey_date,
+      departureTime: journey.departure_time,
+      arrivalTime: journey.arrival_time,
+      origin: journey.origin,
+      destination: journey.destination,
+      reference: journey.reference,
+      note: journey.note,
+    })),
     availability: (slots ?? []).map((slot) => ({
       memberId: slot.member_id,
       date: slot.slot_date,
