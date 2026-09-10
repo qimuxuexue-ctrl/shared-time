@@ -31,7 +31,7 @@ const STEPS: Array<{
   {
     number: "03",
     title: "搜索或导入地点",
-    body: "可用中文、英文、完整地址或邮编搜索。小众地点搜不到时，粘贴 Google 地图分享链接读取定位。",
+    body: "可用中文、英文、地址或邮编搜索，也能粘贴 Google 地图链接。切换到“当天路线”可按时间查看编号地点和连线。",
     icon: <MapPinIcon size={18} weight="duotone" />,
   },
   {

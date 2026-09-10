@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 :root {
   --background: #ffffff;
@@ -54,6 +55,31 @@ button:disabled {
 .loading-tiger {
   animation: loading-tiger-spin 1.6s linear infinite;
   will-change: transform;
+}
+
+.travel-route-marker-shell {
+  border: 0;
+  background: transparent;
+}
+
+.travel-route-marker {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 3px solid white;
+  border-radius: 11px;
+  background: #3478f6;
+  color: white;
+  box-shadow: 0 5px 16px rgb(37 99 235 / 28%);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.travel-route-marker.is-active {
+  background: #173f85;
+  box-shadow: 0 0 0 3px rgb(52 120 246 / 22%), 0 6px 18px rgb(37 99 235 / 32%);
+  transform: scale(1.08);
 }
 
 @layer components {

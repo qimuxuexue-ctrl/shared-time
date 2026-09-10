@@ -30,6 +30,7 @@ import { EventPresence } from "@/components/event-presence";
 import { Modal } from "@/components/modal";
 import { TravelItineraryModal } from "@/components/travel-itinerary-modal";
 import { TravelPlanGuide } from "@/components/travel-plan-guide";
+import { TravelRouteMap } from "@/components/travel-route-map";
 import { TravelTransportModal } from "@/components/travel-transport-modal";
 import {
   addDaysToDateString,
@@ -113,6 +114,8 @@ export function TravelPlanWorkspace({
   const [editingDates, setEditingDates] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const [mapMode, setMapMode] = useState<"point" | "route">("point");
+  const [routeDate, setRouteDate] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<{ item: TravelItineraryItem; x: number; y: number } | null>(null);
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
@@ -125,12 +128,24 @@ export function TravelPlanWorkspace({
     [data.itinerary],
   );
   const focusedItem = sortedItems.find((item) => item.id === focusedItemId) ?? sortedItems[0];
+  const itineraryDates = useMemo(
+    () => Array.from(new Set(sortedItems.map((item) => item.date))),
+    [sortedItems],
+  );
+  const activeRouteDate = routeDate && itineraryDates.includes(routeDate)
+    ? routeDate
+    : focusedItem?.date ?? itineraryDates[0] ?? null;
+  const routeItems = useMemo(
+    () => activeRouteDate ? sortedItems.filter((item) => item.date === activeRouteDate) : [],
+    [activeRouteDate, sortedItems],
+  );
   const mapQuery = encodeURIComponent(
     focusedItem ? `${focusedItem.latitude},${focusedItem.longitude}` : data.event.name,
   );
 
   const focusItem = (item: TravelItineraryItem) => {
     setFocusedItemId(item.id);
+    if (mapMode === "route") setRouteDate(item.date);
     const itemWeek = getMondayDateString(item.date);
     if (itemWeek !== weekStart) onWeekChange(itemWeek);
   };
@@ -314,15 +329,44 @@ export function TravelPlanWorkspace({
         <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-5">
             <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white">
-              <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800"><MapPinIcon size={18} weight="bold" />旅行地图</div>
-              <iframe
-                className="h-56 w-full border-0 bg-slate-100 lg:h-64"
-                src={`https://www.google.com/maps?q=${mapQuery}&output=embed`}
-                title={`${data.event.name} 地图`}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                allowFullScreen
-              />
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><MapPinIcon size={18} weight="bold" />旅行地图</div>
+                <div className="flex rounded-lg bg-slate-100 p-1 text-[11px] font-semibold">
+                  <button type="button" className={`rounded-md px-2 py-1 transition ${mapMode === "point" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setMapMode("point")}>单点</button>
+                  <button type="button" className={`rounded-md px-2 py-1 transition ${mapMode === "route" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setMapMode("route")}>当天路线</button>
+                </div>
+              </div>
+              {mapMode === "route" && itineraryDates.length > 0 ? (
+                <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-2">
+                  <select className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100" value={activeRouteDate ?? ""} onChange={(event) => {
+                    setRouteDate(event.target.value);
+                    const firstItem = sortedItems.find((item) => item.date === event.target.value);
+                    if (firstItem) setFocusedItemId(firstItem.id);
+                  }} aria-label="选择路线日期">
+                    {itineraryDates.map((date) => <option key={date} value={date}>{formatShortDate(date)} · {sortedItems.filter((item) => item.date === date).length} 个地点</option>)}
+                  </select>
+                  <p className="mt-1.5 text-[10px] leading-4 text-slate-400">按时间顺序连接地点，用于查看行程方向，不代表实际道路导航。</p>
+                </div>
+              ) : null}
+              {mapMode === "route" ? (
+                <TravelRouteMap
+                  items={routeItems}
+                  focusedItemId={focusedItemId}
+                  onSelect={(itemId) => {
+                    const item = sortedItems.find((current) => current.id === itemId);
+                    if (item) focusItem(item);
+                  }}
+                />
+              ) : (
+                <iframe
+                  className="h-56 w-full border-0 bg-slate-100 lg:h-64"
+                  src={`https://www.google.com/maps?q=${mapQuery}&output=embed`}
+                  title={`${data.event.name} 地图`}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+              )}
               {sortedItems.length > 0 ? (
                 <div className="max-h-60 space-y-1.5 overflow-y-auto border-t border-slate-100 p-2">
                   {sortedItems.map((item, index) => (
