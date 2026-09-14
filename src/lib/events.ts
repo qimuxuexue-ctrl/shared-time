@@ -58,6 +58,16 @@ type NotifiableEvent = {
   name: string;
 };
 
+type OngoingScheduleEvent = {
+  id: string;
+  workspace_kind: "share_time" | "travel_plan";
+  event_type: "one_time" | "ongoing";
+  time_zone: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
+  final_date: string | null;
+  final_start_hour: number | null;
+  finalized_at: string | null;
+};
+
 const ACTIVE_UPDATE_TYPES = new Set<HomeNotificationType>([
   "participant",
   "note",
@@ -114,6 +124,51 @@ export async function cleanupExpiredOneTimeEvents() {
   if (!eventsToDelete.length) return;
 
   await Promise.all(eventsToDelete.map(deleteExpiredEvent));
+}
+
+export async function rolloverOngoingFinalSchedule<T extends OngoingScheduleEvent>(
+  event: T,
+) {
+  if (
+    event.workspace_kind !== "share_time" ||
+    event.event_type !== "ongoing" ||
+    !event.final_date
+  ) {
+    return event;
+  }
+
+  const currentWeekStart = getMondayDateString(
+    getDateStringInTimeZone(event.time_zone),
+  );
+  if (event.final_date >= currentWeekStart) return event;
+
+  const { data, error } = await supabaseAdmin.rpc(
+    "rollover_event_time_plan",
+    { p_event_id: event.id, p_week_start: currentWeekStart },
+  );
+  if (error || !data) {
+    throw new Error("Unable to roll over the event time plan.");
+  }
+
+  const result = data as {
+    finalTime: { date: string; startHour: number; finalizedAt: string } | null;
+  };
+  event.final_date = result.finalTime?.date ?? null;
+  event.final_start_hour = result.finalTime?.startHour ?? null;
+  event.finalized_at = result.finalTime?.finalizedAt ?? null;
+
+  if (!result.finalTime) {
+    const { error: notificationError } = await supabaseAdmin
+      .from("identity_notifications")
+      .delete()
+      .eq("source_event_id", event.id)
+      .in("notification_type", ["final_time", "final_time_cancelled"]);
+    if (notificationError) {
+      console.error("Unable to clear stale final-time notifications", notificationError);
+    }
+  }
+
+  return event;
 }
 
 export async function notifyEventMembers(
@@ -231,6 +286,14 @@ async function getIdentityEvents(identityId: string) {
 
   const memberships = (data ?? []) as MembershipRow[];
 
+  await Promise.all(
+    memberships.map((membership) =>
+      rolloverOngoingFinalSchedule(
+        membership.events as unknown as JoinedEvent,
+      ),
+    ),
+  );
+
   const eventIds = memberships.map(
     (membership) => (membership.events as unknown as JoinedEvent).id,
   );
@@ -303,10 +366,8 @@ async function getIdentityEvents(identityId: string) {
 export async function getIdentityHomeData(identityId: string) {
   await cleanupExpiredOneTimeEvents();
 
-  const [events, notifications] = await Promise.all([
-    getIdentityEvents(identityId),
-    getIdentityNotifications(identityId),
-  ]);
+  const events = await getIdentityEvents(identityId);
+  const notifications = await getIdentityNotifications(identityId);
   const updatesByEvent = new Map<string, EventUpdateType[]>();
 
   for (const notification of notifications) {

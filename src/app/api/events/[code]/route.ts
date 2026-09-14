@@ -10,6 +10,7 @@ import {
   deleteExpiredEvent,
   isExpiredOneTimeEvent,
   notifyEventMembers,
+  rolloverOngoingFinalSchedule,
 } from "@/lib/events";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -95,6 +96,13 @@ export async function GET(
       { error: "你还没有加入这个事件" },
       { status: 403 },
     );
+  }
+
+  try {
+    await rolloverOngoingFinalSchedule(event);
+  } catch (error) {
+    console.error("Unable to roll over the event time plan", error);
+    return serverError("更新本周时间安排失败，请稍后重试");
   }
 
   const currentWeekStart = getMondayDateString(
