@@ -35,6 +35,7 @@ import { EventPresence } from "@/components/event-presence";
 import { LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
 import { TravelPlanWorkspace } from "@/components/travel-plan-workspace";
+import { HabitTrackerWorkspace } from "@/components/habit-tracker-workspace";
 import { readStoredIdentity, storeIdentity } from "@/lib/browser-identity";
 import {
   addDaysToDateString,
@@ -1335,10 +1336,10 @@ export function EventWorkspace({ code }: { code: string }) {
     return <WorkspaceMessage title="无法打开事件" body={error || "请确认邀请码是否正确。"} />;
   }
 
-  if (data.event.workspaceKind === "travel_plan" && identity) {
+  if (data.event.workspaceKind !== "share_time" && identity) {
     return (
       <>
-        <TravelPlanWorkspace
+        {data.event.workspaceKind === "travel_plan" ? <TravelPlanWorkspace
           data={data}
           identityId={identity.id}
           weekStart={weekStart}
@@ -1386,7 +1387,23 @@ export function EventWorkspace({ code }: { code: string }) {
               return next;
             });
           }}
-        />
+        /> : <HabitTrackerWorkspace
+          data={data}
+          identityId={identity.id}
+          copied={copied}
+          timeZoneSaving={timeZoneSaving}
+          onCopy={() => {
+            void navigator.clipboard.writeText(window.location.href);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+          }}
+          onDelete={() => setShowDeleteConfirm(true)}
+          onLeave={() => {
+            setLeaveEventError("");
+            setShowLeaveConfirm(true);
+          }}
+          onTimeZoneChange={(timeZone) => void saveTimeZone(timeZone)}
+        />}
 
         {showDeleteConfirm ? (
           <DeleteEventModal
@@ -1407,7 +1424,7 @@ export function EventWorkspace({ code }: { code: string }) {
             }}
           >
             <p className="text-sm leading-6 text-slate-600">
-              退出后，你在该旅行计划中的 Tag 和成员记录会被删除；之后仍可通过邀请码重新加入。
+              退出后，你在该事件中的 Tag 和个人记录会被删除；之后仍可通过邀请码重新加入。
             </p>
             {leaveEventError ? <p className="form-error mt-4">{leaveEventError}</p> : null}
             <div className="mt-6 grid grid-cols-2 gap-3">

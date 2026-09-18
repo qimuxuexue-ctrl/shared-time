@@ -18,7 +18,7 @@ type JoinedEvent = {
   start_date: string;
   end_date: string | null;
   weeks_ahead: number;
-  workspace_kind: "share_time" | "travel_plan";
+  workspace_kind: "share_time" | "travel_plan" | "habit_tracker";
   event_type: "one_time" | "ongoing";
   time_zone: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
   final_date: string | null;
@@ -60,7 +60,7 @@ type NotifiableEvent = {
 
 type OngoingScheduleEvent = {
   id: string;
-  workspace_kind: "share_time" | "travel_plan";
+  workspace_kind: "share_time" | "travel_plan" | "habit_tracker";
   event_type: "one_time" | "ongoing";
   time_zone: "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
   final_date: string | null;

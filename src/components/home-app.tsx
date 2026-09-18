@@ -3,6 +3,7 @@
 import {
   ArrowRightIcon,
   CalendarBlankIcon,
+  CheckSquareOffsetIcon,
   CaretDownIcon,
   ClockIcon,
   HashIcon,
@@ -489,6 +490,13 @@ export function HomeApp() {
               emptyText="还没有 Travel plan 事件"
               onDelete={setDeleteTarget}
             />
+            <EventGroup
+              title="Habit Tracker"
+              description="在同一张日历里记录多项习惯"
+              events={events.filter((event) => event.workspaceKind === "habit_tracker")}
+              emptyText="还没有 Habit Tracker 事件"
+              onDelete={setDeleteTarget}
+            />
           </div>
         )}
       </div>
@@ -592,7 +600,7 @@ function EventCard({ event, onDelete }: { event: EventSummary; onDelete: (event:
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1 text-sm text-slate-400">
             <span className="flex items-center gap-1"><UsersThreeIcon size={15} weight="bold" />{event.participantCount} 人参加</span>
-            <span>{event.workspaceKind === "travel_plan" ? "旅行计划" : event.eventType === "one_time" ? "一次性" : "常驻"}{" · "}{getEventTimeZoneLabel(event.timeZone, true)}</span>
+            <span>{event.workspaceKind === "travel_plan" ? "旅行计划" : event.workspaceKind === "habit_tracker" ? "习惯打卡" : event.eventType === "one_time" ? "一次性" : "常驻"}{" · "}{getEventTimeZoneLabel(event.timeZone, true)}</span>
             {event.finalTime ? <span className="font-semibold text-blue-600">{formatFinalTimeSummary(event.finalTime)}</span> : null}
           </div>
         </div>
@@ -671,10 +679,10 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
       <form onSubmit={submit} className="space-y-5">
         <fieldset>
           <legend className="field-label">创建类型</legend>
-          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5">
+          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1.5">
             <button
               type="button"
-              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition ${workspaceKind === "share_time" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "share_time" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
               onClick={() => setWorkspaceKind("share_time")}
               aria-pressed={workspaceKind === "share_time"}
             >
@@ -683,18 +691,27 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
             </button>
             <button
               type="button"
-              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition ${workspaceKind === "travel_plan" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "travel_plan" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
               onClick={() => setWorkspaceKind("travel_plan")}
               aria-pressed={workspaceKind === "travel_plan"}
             >
               <MapTrifoldIcon size={17} weight="bold" />
               Travel plan
             </button>
+            <button
+              type="button"
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "habit_tracker" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              onClick={() => setWorkspaceKind("habit_tracker")}
+              aria-pressed={workspaceKind === "habit_tracker"}
+            >
+              <CheckSquareOffsetIcon size={17} weight="bold" />
+              Habit Tracker
+            </button>
           </div>
         </fieldset>
         <div>
           <label htmlFor="event-name" className="field-label">事件名称</label>
-          <input id="event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={workspaceKind === "travel_plan" ? "例如 东京 5 日游" : "例如 日英课"} autoFocus maxLength={80} />
+          <input id="event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={workspaceKind === "travel_plan" ? "例如 东京 5 日游" : workspaceKind === "habit_tracker" ? "例如 我的日常习惯" : "例如 日英课"} autoFocus maxLength={80} />
         </div>
         <div>
           <label htmlFor="create-tag" className="field-label">你的 Tag</label>
@@ -714,7 +731,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
               一次性事件在本周结束后自动清理；常驻事件可以一直向后预约。
             </p>
           </div>
-        ) : (
+        ) : workspaceKind === "travel_plan" ? (
           <div>
             <span className="field-label">旅行日期</span>
             <div className="grid grid-cols-2 gap-3">
@@ -734,7 +751,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
               日历按周一开始展示，旅行日期之外的时间会锁定。
             </p>
           </div>
-        )}
+        ) : <p className="text-xs leading-5 text-slate-500">创建后在同一张日历中添加多个习惯并打卡。</p>}
         <div>
           <label htmlFor="event-time-zone" className="field-label">事件时区</label>
           <select

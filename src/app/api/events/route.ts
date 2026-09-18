@@ -20,7 +20,7 @@ const createEventSchema = z
     identityId: identityIdSchema,
     name: z.string().trim().min(1, "请输入事件名称").max(80),
     tagName: z.string().trim().min(1).max(24).optional(),
-    workspaceKind: z.enum(["share_time", "travel_plan"]).default("share_time"),
+    workspaceKind: z.enum(["share_time", "travel_plan", "habit_tracker"]).default("share_time"),
     eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
     startDate: z.string().refine(isValidDateString, "开始日期不正确").optional(),
     endDate: z.string().refine(isValidDateString, "结束日期不正确").optional(),
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       ? parsed.data.startDate!
       : getMondayDateString(getDateStringInTimeZone(timeZone));
   const endDate = workspaceKind === "travel_plan" ? parsed.data.endDate! : null;
-  const eventType = workspaceKind === "travel_plan" ? "ongoing" : parsed.data.eventType;
+  const eventType = workspaceKind === "share_time" ? parsed.data.eventType : "ongoing";
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const shareCode = createShareCode();

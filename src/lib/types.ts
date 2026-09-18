@@ -5,7 +5,7 @@ export type Identity = {
 
 export type EventType = "one_time" | "ongoing";
 
-export type WorkspaceKind = "share_time" | "travel_plan";
+export type WorkspaceKind = "share_time" | "travel_plan" | "habit_tracker";
 
 export type EventTimeZone = "Asia/Bangkok" | "Asia/Shanghai" | "Asia/Tokyo";
 
