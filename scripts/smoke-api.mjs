@@ -14,6 +14,7 @@ let identityId;
 const otherIdentityIds = [];
 let eventId;
 let oneTimeEventId;
+let habitEventId;
 
 async function post(path, body) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -288,12 +289,63 @@ try {
   }
   oneTimeEventId = undefined;
   console.log("one-time event range and expiry cleanup: ok");
+
+  const emptyHabitEvent = await post("/api/events", {
+    identityId,
+    name: "Plan habits later",
+    tagName: "Test learner",
+    workspaceKind: "habit_tracker",
+  });
+  const { count: emptyHabitCount } = await supabase.from("habits")
+    .select("id", { count: "exact", head: true }).eq("event_id", emptyHabitEvent.event.id);
+  if (emptyHabitCount !== 0) throw new Error("Empty habit plan unexpectedly created habits.");
+  await supabase.from("events").delete().eq("id", emptyHabitEvent.event.id);
+  console.log("habit plan can be created before adding habits: ok");
+
+  const habitEvent = await post("/api/events", {
+    identityId,
+    name: "Study together",
+    tagName: "Test learner",
+    workspaceKind: "habit_tracker",
+    habits: [
+      { title: "Vocabulary", frequency: "daily", targetCount: 2 },
+      { title: "Reading", frequency: "weekly", targetCount: 3 },
+    ],
+  });
+  habitEventId = habitEvent.event.id;
+  await post("/api/events/join", {
+    identityId: otherIdentityIds[0],
+    shareCode: habitEvent.event.shareCode,
+  });
+  const habitUrl = `${baseUrl}/api/events/${habitEvent.event.shareCode}/habits`;
+  const dateParts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+  const today = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+  const month = today.slice(0, 7);
+  const ownHabits = await (await fetch(`${habitUrl}?identityId=${identityId}&month=${month}`)).json();
+  if (ownHabits.habits?.length !== 2 || ownHabits.checkins?.length !== 0) {
+    throw new Error("Created habit list was not saved.");
+  }
+  const stamp = await fetch(habitUrl, {
+    method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ identityId, habitId: ownHabits.habits[0].id, date: today, count: 1 }),
+  });
+  if (!stamp.ok) throw new Error("Habit check-in failed.");
+  const otherHabits = await (await fetch(`${habitUrl}?identityId=${otherIdentityIds[0]}&month=${month}`)).json();
+  if (otherHabits.habits?.length !== 2 || otherHabits.checkins?.length !== 0) {
+    throw new Error("Shared habit list or personal check-ins are incorrect.");
+  }
+  console.log("multi-habit create and independent shared check-ins: ok");
 } finally {
   if (eventId) {
     await supabase.from("events").delete().eq("id", eventId);
   }
   if (oneTimeEventId) {
     await supabase.from("events").delete().eq("id", oneTimeEventId);
+  }
+  if (habitEventId) {
+    await supabase.from("events").delete().eq("id", habitEventId);
   }
   if (identityId) {
     await supabase.from("identities").delete().eq("id", identityId);

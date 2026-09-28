@@ -1402,6 +1402,10 @@ export function EventWorkspace({ code }: { code: string }) {
             setLeaveEventError("");
             setShowLeaveConfirm(true);
           }}
+          onEditTag={() => {
+            setMemberError("");
+            setEditingMember(true);
+          }}
           onTimeZoneChange={(timeZone) => void saveTimeZone(timeZone)}
         />}
 

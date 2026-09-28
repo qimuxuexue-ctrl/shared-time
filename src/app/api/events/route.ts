@@ -10,6 +10,7 @@ import {
   getIdentityHomeData,
   pickTagColor,
 } from "@/lib/events";
+import { habitFieldsSchema } from "@/lib/habits";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -24,6 +25,7 @@ const createEventSchema = z
     eventType: z.enum(["one_time", "ongoing"]).default("one_time"),
     startDate: z.string().refine(isValidDateString, "开始日期不正确").optional(),
     endDate: z.string().refine(isValidDateString, "结束日期不正确").optional(),
+    habits: z.array(habitFieldsSchema).max(20, "最多添加 20 个习惯").optional(),
     timeZone: z.enum(["Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo"]).default("Asia/Shanghai"),
   })
   .superRefine((value, context) => {
@@ -123,6 +125,23 @@ export async function POST(request: Request) {
     if (memberError || !member) {
       await supabaseAdmin.from("events").delete().eq("id", event.id);
       return serverError("创建事件失败，请稍后重试");
+    }
+
+    if (workspaceKind === "habit_tracker" && parsed.data.habits?.length) {
+      const createdAt = Date.now();
+      const { error: habitsError } = await supabaseAdmin.from("habits").insert(
+        parsed.data.habits.map((habit, index) => ({
+          event_id: event.id,
+          title: habit.title,
+          frequency: habit.frequency,
+          target_count: habit.targetCount,
+          created_at: new Date(createdAt + index).toISOString(),
+        })),
+      );
+      if (habitsError) {
+        await supabaseAdmin.from("events").delete().eq("id", event.id);
+        return serverError("保存习惯清单失败，请稍后重试");
+      }
     }
 
     return Response.json(

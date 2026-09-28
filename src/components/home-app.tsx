@@ -36,6 +36,7 @@ import {
   getDateStringInTimeZone,
   getEventTimeZoneLabel,
 } from "@/lib/dates";
+import { HABIT_FREQUENCIES, type HabitFrequency } from "@/lib/habits";
 import type {
   EventSummary,
   EventTimeZone,
@@ -645,6 +646,10 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
   const today = getDateStringInTimeZone(timeZone);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [habits, setHabits] = useState<{ id: number; title: string; frequency: HabitFrequency; targetCount: number }[]>([]);
+  const updateHabit = (id: number, update: Partial<(typeof habits)[number]>) => {
+    setHabits((items) => items.map((habit) => habit.id === id ? { ...habit, ...update } : habit));
+  };
 
   const submit = async (formEvent: FormEvent<HTMLFormElement>) => {
     formEvent.preventDefault();
@@ -662,6 +667,9 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           eventType,
           startDate: workspaceKind === "travel_plan" ? startDate : undefined,
           endDate: workspaceKind === "travel_plan" ? endDate : undefined,
+          habits: workspaceKind === "habit_tracker" ? habits
+            .filter((habit) => habit.title.trim())
+            .map(({ title, frequency, targetCount }) => ({ title: title.trim(), frequency, targetCount })) : undefined,
           timeZone,
         }),
       });
@@ -675,14 +683,14 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
   };
 
   return (
-    <Modal title="创建事件" onClose={onClose}>
+    <Modal title="创建事件" onClose={onClose} size={workspaceKind === "habit_tracker" ? "wide" : "default"}>
       <form onSubmit={submit} className="space-y-5">
         <fieldset>
           <legend className="field-label">创建类型</legend>
           <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1.5">
             <button
               type="button"
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "share_time" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold whitespace-nowrap transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "share_time" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
               onClick={() => setWorkspaceKind("share_time")}
               aria-pressed={workspaceKind === "share_time"}
             >
@@ -691,7 +699,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
             </button>
             <button
               type="button"
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "travel_plan" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold whitespace-nowrap transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "travel_plan" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
               onClick={() => setWorkspaceKind("travel_plan")}
               aria-pressed={workspaceKind === "travel_plan"}
             >
@@ -700,7 +708,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
             </button>
             <button
               type="button"
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "habit_tracker" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2.5 text-xs font-semibold whitespace-nowrap transition sm:flex-row sm:gap-1.5 sm:text-sm ${workspaceKind === "habit_tracker" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
               onClick={() => setWorkspaceKind("habit_tracker")}
               aria-pressed={workspaceKind === "habit_tracker"}
             >
@@ -710,8 +718,8 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           </div>
         </fieldset>
         <div>
-          <label htmlFor="event-name" className="field-label">事件名称</label>
-          <input id="event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={workspaceKind === "travel_plan" ? "例如 东京 5 日游" : workspaceKind === "habit_tracker" ? "例如 我的日常习惯" : "例如 日英课"} autoFocus maxLength={80} />
+          <label htmlFor="event-name" className="field-label">{workspaceKind === "habit_tracker" ? "打卡计划名称" : "事件名称"}</label>
+          <input id="event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={workspaceKind === "travel_plan" ? "例如 东京 5 日游" : workspaceKind === "habit_tracker" ? "例如 一起学习计划" : "例如 日英课"} autoFocus maxLength={80} />
         </div>
         <div>
           <label htmlFor="create-tag" className="field-label">你的 Tag</label>
@@ -751,7 +759,35 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
               日历按周一开始展示，旅行日期之外的时间会锁定。
             </p>
           </div>
-        ) : <p className="text-xs leading-5 text-slate-500">创建后在同一张日历中添加多个习惯并打卡。</p>}
+        ) : (
+          <fieldset>
+            <legend className="field-label">习惯清单 <span className="font-normal text-slate-400">（选填）</span></legend>
+            <p className="mb-3 text-xs leading-5 text-slate-500">可以现在添加，也可以先创建计划、进入日历后再慢慢补充。分享后大家共用习惯清单，各自独立打卡。</p>
+            <div className="space-y-2">
+              {habits.map((habit, index) => {
+                const max = HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.max ?? 1;
+                return (
+                  <div key={habit.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-600">习惯 {index + 1}</span>
+                      <button type="button" className="rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setHabits((items) => items.filter((item) => item.id !== habit.id))} aria-label={`移除习惯 ${index + 1}`}><TrashIcon size={15} weight="bold" /></button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(90px,0.6fr)]">
+                      <input className="text-input col-span-2 sm:col-span-1" value={habit.title} onChange={(event) => updateHabit(habit.id, { title: event.target.value })} placeholder="例如 背单词" maxLength={60} aria-label={`习惯 ${index + 1} 标题`} />
+                      <select className="text-input" value={habit.frequency} onChange={(event) => { const frequency = event.target.value as HabitFrequency; const nextMax = HABIT_FREQUENCIES.find((item) => item.value === frequency)?.max ?? 1; updateHabit(habit.id, { frequency, targetCount: Math.min(habit.targetCount, nextMax) }); }} aria-label={`习惯 ${index + 1} 周期`}>
+                        {HABIT_FREQUENCIES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <select className="text-input" value={habit.targetCount} onChange={(event) => updateHabit(habit.id, { targetCount: Number(event.target.value) })} aria-label={`习惯 ${index + 1} 次数`}>
+                        {Array.from({ length: max }, (_, count) => count + 1).map((count) => <option key={count} value={count}>{count} 次</option>)}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-left text-blue-700 transition hover:border-blue-200 hover:bg-blue-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:opacity-50" disabled={habits.length >= 20} onClick={() => setHabits((items) => [...items, { id: items.reduce((highest, item) => Math.max(highest, item.id), -1) + 1, title: "", frequency: "daily", targetCount: 1 }])}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-blue-100"><PlusIcon size={16} weight="bold" /></span><span><span className="block text-sm font-semibold">添加习惯</span><span className="mt-0.5 block text-xs font-normal text-blue-500">{habits.length ? "还可以继续添加下一项" : "例如背单词、运动或早睡"}</span></span></button>
+          </fieldset>
+        )}
         <div>
           <label htmlFor="event-time-zone" className="field-label">事件时区</label>
           <select
@@ -774,7 +810,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
         </div>
         {error ? <p className="form-error">{error}</p> : null}
         <button type="submit" className="primary-button w-full" disabled={submitting || !name.trim() || !tagName.trim()}>
-          {submitting ? "正在创建" : "创建事件"}
+          {submitting ? "正在创建" : workspaceKind === "habit_tracker" ? "创建打卡计划" : "创建事件"}
         </button>
       </form>
     </Modal>

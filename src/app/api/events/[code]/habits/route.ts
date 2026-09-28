@@ -1,21 +1,12 @@
 import { z } from "zod";
 
 import { addDaysToDateString, getDateStringInTimeZone, getMondayDateString, isValidDateString } from "@/lib/dates";
+import { habitFieldsSchema } from "@/lib/habits";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const identity = z.object({ identityId: z.uuid() });
-const habitFields = {
-  title: z.string().trim().min(1, "请输入习惯标题").max(60),
-  frequency: z.enum(["daily", "weekly", "half_monthly", "monthly"]),
-  targetCount: z.number().int().min(1).max(31),
-};
-const habitSchema = identity.extend(habitFields).refine((value) =>
-  value.frequency === "daily" ? value.targetCount <= 10
-    : value.frequency === "weekly" ? value.targetCount <= 7
-      : value.frequency === "half_monthly" ? value.targetCount <= 13
-        : value.targetCount <= 28,
-{ message: "目标次数超过该周期的天数" });
+const habitSchema = identity.safeExtend(habitFieldsSchema.shape).refine((value) => habitFieldsSchema.safeParse(value).success, { message: "目标次数超过该周期的上限" });
 const editSchema = habitSchema.safeExtend({ habitId: z.uuid() });
 const deleteSchema = identity.extend({ habitId: z.uuid() });
 const checkinSchema = identity.extend({
