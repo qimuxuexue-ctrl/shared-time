@@ -15,6 +15,7 @@ const otherIdentityIds = [];
 let eventId;
 let oneTimeEventId;
 let habitEventId;
+let travelEventId;
 
 async function post(path, body) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -290,6 +291,59 @@ try {
   oneTimeEventId = undefined;
   console.log("one-time event range and expiry cleanup: ok");
 
+  const tripStartValue = new Date();
+  tripStartValue.setUTCDate(tripStartValue.getUTCDate() + 30);
+  const tripEndValue = new Date(tripStartValue);
+  tripEndValue.setUTCDate(tripEndValue.getUTCDate() + 4);
+  const tripStart = tripStartValue.toISOString().slice(0, 10);
+  const tripEnd = tripEndValue.toISOString().slice(0, 10);
+  const travelEvent = await post("/api/events", {
+    identityId,
+    name: "Flexible travel plan",
+    workspaceKind: "travel_plan",
+    startDate: tripStart,
+    endDate: tripEnd,
+  });
+  travelEventId = travelEvent.event.id;
+  const itineraryUrl = `/api/events/${travelEvent.event.shareCode}/itinerary`;
+  const unscheduled = await post(itineraryUrl, {
+    identityId,
+    date: null,
+    startHour: null,
+    endHour: null,
+    title: "Maybe visit a museum",
+    note: "Decide later",
+    placeName: null,
+    address: null,
+    latitude: null,
+    longitude: null,
+  });
+  if (unscheduled.item?.date !== null || unscheduled.item?.placeName !== null) {
+    throw new Error("Unscheduled itinerary item was not stored correctly.");
+  }
+  const scheduleResponse = await fetch(`${baseUrl}${itineraryUrl}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      identityId,
+      itemId: unscheduled.item.id,
+      date: tripStart,
+      startHour: 10,
+      endHour: 11,
+      title: unscheduled.item.title,
+      note: unscheduled.item.note,
+      placeName: null,
+      address: null,
+      latitude: null,
+      longitude: null,
+    }),
+  });
+  const scheduled = await scheduleResponse.json();
+  if (!scheduleResponse.ok || scheduled.item?.date !== tripStart || scheduled.item?.placeName !== null) {
+    throw new Error(`Scheduling an item without a place failed: ${scheduled.error ?? scheduleResponse.statusText}`);
+  }
+  console.log("unscheduled travel item and optional place: ok");
+
   const emptyHabitEvent = await post("/api/events", {
     identityId,
     name: "Plan habits later",
@@ -346,6 +400,9 @@ try {
   }
   if (habitEventId) {
     await supabase.from("events").delete().eq("id", habitEventId);
+  }
+  if (travelEventId) {
+    await supabase.from("events").delete().eq("id", travelEventId);
   }
   if (identityId) {
     await supabase.from("identities").delete().eq("id", identityId);
