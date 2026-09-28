@@ -4,6 +4,7 @@ export const CALENDAR_HOUR_START = 10;
 export const CALENDAR_HOUR_END = 24;
 export const CALENDAR_HOUR_HEIGHT = 80;
 export const CALENDAR_TIME_GUTTER = 68;
+const CALENDAR_HOUR_COUNT = CALENDAR_HOUR_END - CALENDAR_HOUR_START;
 
 export function getDurationBlockStyle({
   dayIndex,
@@ -25,8 +26,8 @@ export function getDurationBlockStyle({
   const visualMinutes = Math.max(60, durationMinutes);
 
   return {
-    top: (startHour - CALENDAR_HOUR_START) * CALENDAR_HOUR_HEIGHT + 6,
-    height: visualMinutes / 60 * CALENDAR_HOUR_HEIGHT - 12,
+    top: `calc(${((startHour - CALENDAR_HOUR_START) / CALENDAR_HOUR_COUNT) * 100}% + 6px)`,
+    height: `calc(${(visualMinutes / 60 / CALENDAR_HOUR_COUNT) * 100}% - 12px)`,
     left: `calc(${columnFraction * 100}% + ${CALENDAR_TIME_GUTTER * (1 - columnFraction) + 5}px)`,
     width: `calc(${widthFraction * 100}% - ${CALENDAR_TIME_GUTTER * widthFraction + 10}px)`,
   };
