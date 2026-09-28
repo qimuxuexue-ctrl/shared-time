@@ -28,22 +28,23 @@ export function TravelItineraryModal({
   identityId: string;
   startDate: string;
   endDate: string;
-  seed: TravelItineraryItem | { date: string; startHour: number };
+  seed: TravelItineraryItem | { date: string; startHour: number } | { date: null; startHour: null };
   onClose: () => void;
   onSaved: (item: TravelItineraryItem) => void;
   onDeleted: (itemId: string) => void;
 }) {
   const existing = "id" in seed ? seed : null;
-  const [date, setDate] = useState(seed.date);
-  const [startHour, setStartHour] = useState(seed.startHour);
-  const [endHour, setEndHour] = useState(existing?.endHour ?? seed.startHour + 1);
+  const [scheduled, setScheduled] = useState(seed.date !== null && seed.startHour !== null);
+  const [date, setDate] = useState(seed.date ?? startDate);
+  const [startHour, setStartHour] = useState(seed.startHour ?? 10);
+  const [endHour, setEndHour] = useState(existing?.endHour ?? (seed.startHour ?? 10) + 1);
   const [title, setTitle] = useState(existing?.title ?? "");
   const [note, setNote] = useState(existing?.note ?? "");
   const [query, setQuery] = useState(existing?.placeName ?? "");
-  const [place, setPlace] = useState<PlaceResult | null>(existing ? {
+  const [place, setPlace] = useState<PlaceResult | null>(existing?.placeName && existing.latitude !== null && existing.longitude !== null ? {
     id: existing.id,
     name: existing.placeName,
-    address: existing.address,
+    address: existing.address ?? "",
     latitude: existing.latitude,
     longitude: existing.longitude,
   } : null);
@@ -96,10 +97,6 @@ export function TravelItineraryModal({
 
   const save = async (formEvent: FormEvent<HTMLFormElement>) => {
     formEvent.preventDefault();
-    if (!place) {
-      setError("请先搜索并选择一个地点");
-      return;
-    }
     setSaving(true);
     setError("");
     try {
@@ -109,15 +106,15 @@ export function TravelItineraryModal({
         body: JSON.stringify({
           identityId,
           itemId: existing?.id,
-          date,
-          startHour,
-          endHour,
+          date: scheduled ? date : null,
+          startHour: scheduled ? startHour : null,
+          endHour: scheduled ? endHour : null,
           title,
           note,
-          placeName: place.name,
-          address: place.address,
-          latitude: place.latitude,
-          longitude: place.longitude,
+          placeName: place?.name ?? null,
+          address: place?.address ?? null,
+          latitude: place?.latitude ?? null,
+          longitude: place?.longitude ?? null,
         }),
       });
       const payload = (await response.json()) as { item?: TravelItineraryItem; error?: string };
@@ -149,9 +146,14 @@ export function TravelItineraryModal({
   };
 
   return (
-    <Modal title={existing ? "编辑行程" : "添加行程"} onClose={saving || deleting ? () => undefined : onClose}>
+    <Modal title={existing ? "编辑行程" : scheduled ? "添加行程" : "添加未定行程"} onClose={saving || deleting ? () => undefined : onClose}>
       <form className="space-y-5" onSubmit={save}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_0.8fr_0.8fr]">
+        <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-3 py-3">
+          <div><p className="text-sm font-semibold text-slate-700">安排到日历</p><p className="mt-0.5 text-xs text-slate-400">关闭后会先保存在“未定行程”。</p></div>
+          <button type="button" role="switch" aria-checked={scheduled} className={`relative h-7 w-12 shrink-0 rounded-full transition ${scheduled ? "bg-blue-600" : "bg-slate-300"}`} onClick={() => setScheduled((current) => !current)}><span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${scheduled ? "translate-x-6" : "translate-x-1"}`} /></button>
+        </div>
+
+        {scheduled ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_0.8fr_0.8fr]">
           <div>
             <label htmlFor="trip-date" className="field-label">日期</label>
             <input id="trip-date" type="date" className="text-input" min={startDate} max={endDate} value={date} onChange={(event) => setDate(event.target.value)} />
@@ -172,7 +174,7 @@ export function TravelItineraryModal({
               {Array.from({ length: 24 - startHour }, (_, index) => startHour + index + 1).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}
             </select>
           </div>
-        </div>
+        </div> : null}
 
         <div className="space-y-3">
           <div>
@@ -202,7 +204,7 @@ export function TravelItineraryModal({
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="place-query" className="field-label mb-0">地点</label>
+            <label htmlFor="place-query" className="field-label mb-0">地点 <span className="font-normal text-slate-400">（选填）</span></label>
             <details className="group relative">
               <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-slate-700">
                 <QuestionMarkIcon size={15} weight="bold" />怎样搜得更准
@@ -224,7 +226,7 @@ export function TravelItineraryModal({
             </button>
           </div>
           <p className="text-xs leading-5 text-slate-400">
-            优先显示中文名称，也支持英文搜索；地点数据由
+            不填写地点也可以保存；填写后才会显示在旅行地图中。地点数据由
             <a className="ml-1 underline decoration-slate-300 underline-offset-2 hover:text-slate-600" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>
             提供。
           </p>
@@ -278,7 +280,7 @@ export function TravelItineraryModal({
 
         <div className={`grid gap-3 ${existing ? "grid-cols-[auto_1fr]" : "grid-cols-1"}`}>
           {existing ? <button type="button" className="secondary-button justify-center text-red-600 hover:border-red-200 hover:bg-red-50" disabled={saving || deleting} onClick={() => void remove()}><TrashIcon size={17} weight="bold" />{deleting ? "正在删除" : "删除"}</button> : null}
-          <button type="submit" className="primary-button w-full" disabled={saving || deleting || importing || !place || !title.trim()}>{saving ? "正在保存" : existing ? "保存修改" : "加入行程"}</button>
+          <button type="submit" className="primary-button w-full" disabled={saving || deleting || importing || !title.trim()}>{saving ? "正在保存" : existing ? "保存修改" : scheduled ? "加入行程" : "保存到未定行程"}</button>
         </div>
       </form>
     </Modal>

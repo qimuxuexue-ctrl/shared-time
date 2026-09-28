@@ -387,8 +387,10 @@ export async function PATCH(
       .eq("event_id", event.id);
     if (itineraryError) return serverError();
     const hasOutsideItem = (itinerary ?? []).some(
-      (item) => item.trip_date < travelDatesUpdate.data.startDate
-        || item.trip_date > travelDatesUpdate.data.endDate,
+      (item) => item.trip_date !== null && (
+        item.trip_date < travelDatesUpdate.data.startDate
+        || item.trip_date > travelDatesUpdate.data.endDate
+      ),
     );
     if (hasOutsideItem) {
       return Response.json({

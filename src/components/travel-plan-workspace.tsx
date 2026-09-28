@@ -58,9 +58,19 @@ const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
 type DragTarget = { date: string; startHour: number };
+type ScheduledTravelItem = TravelItineraryItem & { date: string; startHour: number; endHour: number };
+type LocatedTravelItem = ScheduledTravelItem & { placeName: string; address: string | null; latitude: number; longitude: number };
+
+function isScheduledItem(item: TravelItineraryItem): item is ScheduledTravelItem {
+  return item.date !== null && item.startHour !== null && item.endHour !== null;
+}
+
+function isLocatedItem(item: ScheduledTravelItem): item is LocatedTravelItem {
+  return item.placeName !== null && item.latitude !== null && item.longitude !== null;
+}
 
 type DragCandidate = {
-  item: TravelItineraryItem;
+  item: ScheduledTravelItem;
   pointerId: number;
   pointerType: string;
   startX: number;
@@ -130,7 +140,7 @@ export function TravelPlanWorkspace({
   const dates = Array.from({ length: 7 }, (_, index) =>
     addDaysToDateString(weekStart, index),
   );
-  const [draft, setDraft] = useState<TravelItineraryItem | { date: string; startHour: number } | null>(null);
+  const [draft, setDraft] = useState<TravelItineraryItem | { date: string; startHour: number } | { date: null; startHour: null } | null>(null);
   const [transportItemId, setTransportItemId] = useState<string | null>(null);
   const [stayDraft, setStayDraft] = useState<TravelStay | "new" | null>(null);
   const [journeyDirection, setJourneyDirection] = useState<"outbound" | "return" | null>(null);
@@ -139,7 +149,7 @@ export function TravelPlanWorkspace({
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [mapMode, setMapMode] = useState<"point" | "route">("point");
   const [routeDate, setRouteDate] = useState<string | null>(null);
-  const [dragPreview, setDragPreview] = useState<{ item: TravelItineraryItem; x: number; y: number } | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ item: ScheduledTravelItem; x: number; y: number } | null>(null);
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const [moveError, setMoveError] = useState("");
@@ -147,20 +157,25 @@ export function TravelPlanWorkspace({
   const dragTargetRef = useRef<DragTarget | null>(null);
   const suppressClickRef = useRef(false);
   const sortedItems = useMemo(
-    () => [...data.itinerary].sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour),
+    () => data.itinerary.filter(isScheduledItem).sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour),
     [data.itinerary],
   );
-  const focusedItem = sortedItems.find((item) => item.id === focusedItemId) ?? sortedItems[0];
+  const unscheduledItems = useMemo(
+    () => data.itinerary.filter((item): boolean => !isScheduledItem(item)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [data.itinerary],
+  );
+  const mapItems = useMemo(() => sortedItems.filter(isLocatedItem), [sortedItems]);
+  const focusedItem = mapItems.find((item) => item.id === focusedItemId) ?? mapItems[0];
   const itineraryDates = useMemo(
-    () => Array.from(new Set(sortedItems.map((item) => item.date))),
-    [sortedItems],
+    () => Array.from(new Set(mapItems.map((item) => item.date))),
+    [mapItems],
   );
   const activeRouteDate = routeDate && itineraryDates.includes(routeDate)
     ? routeDate
     : focusedItem?.date ?? itineraryDates[0] ?? null;
   const routeItems = useMemo(
-    () => activeRouteDate ? sortedItems.filter((item) => item.date === activeRouteDate) : [],
-    [activeRouteDate, sortedItems],
+    () => activeRouteDate ? mapItems.filter((item) => item.date === activeRouteDate) : [],
+    [activeRouteDate, mapItems],
   );
   const mapQuery = encodeURIComponent(
     focusedItem ? `${focusedItem.latitude},${focusedItem.longitude}` : data.event.name,
@@ -176,8 +191,8 @@ export function TravelPlanWorkspace({
     setDraft({ date, startHour: Math.min(23, latestEndHour) });
   };
 
-  const focusItem = (item: TravelItineraryItem) => {
-    setFocusedItemId(item.id);
+  const focusItem = (item: ScheduledTravelItem) => {
+    if (isLocatedItem(item)) setFocusedItemId(item.id);
     if (mapMode === "route") setRouteDate(item.date);
     const itemWeek = getMondayDateString(item.date);
     if (itemWeek !== weekStart) onWeekChange(itemWeek);
@@ -193,7 +208,7 @@ export function TravelPlanWorkspace({
     setDragPreview({ item: candidate.item, x, y });
   };
 
-  const startDragging = (event: ReactPointerEvent<HTMLButtonElement>, item: TravelItineraryItem) => {
+  const startDragging = (event: ReactPointerEvent<HTMLButtonElement>, item: ScheduledTravelItem) => {
     if (movingItemId || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -237,7 +252,7 @@ export function TravelPlanWorkspace({
     setDragTarget(nextTarget);
   };
 
-  const moveItem = async (item: TravelItineraryItem, target: DragTarget) => {
+  const moveItem = async (item: ScheduledTravelItem, target: DragTarget) => {
     if (item.date === target.date && item.startHour === target.startHour) return;
     const duration = item.endHour - item.startHour;
     setMovingItemId(item.id);
@@ -415,6 +430,11 @@ export function TravelPlanWorkspace({
               </div>
             </section>
 
+            <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
+              <div className="flex items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-slate-800">未定行程</h2><p className="mt-1 text-xs text-slate-400">先记下想去的地方，之后再安排时间。</p></div><button type="button" className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition hover:bg-blue-100 active:scale-95" onClick={() => setDraft({ date: null, startHour: null })} aria-label="添加未定行程"><PlusIcon size={17} weight="bold" /></button></div>
+              {unscheduledItems.length ? <div className="mt-3 space-y-2">{unscheduledItems.map((item) => <button key={item.id} type="button" className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/60" onClick={() => setDraft(item)}><span className="block break-words text-sm font-semibold text-slate-700">{item.title}</span>{item.note ? <span className="mt-1 line-clamp-2 block whitespace-pre-wrap break-words text-xs leading-5 text-slate-400">{item.note}</span> : null}{item.placeName ? <span className="mt-1.5 flex items-center gap-1 text-xs text-blue-500"><MapPinIcon size={12} weight="bold" />{item.placeName}</span> : null}</button>)}</div> : <button type="button" className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-3 text-left text-xs font-medium text-slate-400 transition hover:border-blue-200 hover:bg-blue-50/60 hover:text-blue-600" onClick={() => setDraft({ date: null, startHour: null })}><span className="grid size-7 place-items-center rounded-full bg-white ring-1 ring-slate-200"><PlusIcon size={14} weight="bold" /></span>添加第一项未定行程</button>}
+            </section>
+
             <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white">
               <div className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><MapPinIcon size={18} weight="bold" />旅行地图</div>
@@ -427,10 +447,10 @@ export function TravelPlanWorkspace({
                 <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-2">
                   <select className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100" value={activeRouteDate ?? ""} onChange={(event) => {
                     setRouteDate(event.target.value);
-                    const firstItem = sortedItems.find((item) => item.date === event.target.value);
+                    const firstItem = mapItems.find((item) => item.date === event.target.value);
                     if (firstItem) setFocusedItemId(firstItem.id);
                   }} aria-label="选择路线日期">
-                    {itineraryDates.map((date) => <option key={date} value={date}>{formatShortDate(date)} · {sortedItems.filter((item) => item.date === date).length} 个地点</option>)}
+                    {itineraryDates.map((date) => <option key={date} value={date}>{formatShortDate(date)} · {mapItems.filter((item) => item.date === date).length} 个地点</option>)}
                   </select>
                   <p className="mt-1.5 text-[10px] leading-4 text-slate-400">按时间顺序连接地点，用于查看行程方向，不代表实际道路导航。</p>
                 </div>
@@ -440,7 +460,7 @@ export function TravelPlanWorkspace({
                   items={routeItems}
                   focusedItemId={focusedItemId}
                   onSelect={(itemId) => {
-                    const item = sortedItems.find((current) => current.id === itemId);
+                    const item = mapItems.find((current) => current.id === itemId);
                     if (item) focusItem(item);
                   }}
                 />
@@ -454,9 +474,9 @@ export function TravelPlanWorkspace({
                   allowFullScreen
                 />
               )}
-              {sortedItems.length > 0 ? (
+              {mapItems.length > 0 ? (
                 <div className="max-h-60 space-y-1.5 overflow-y-auto border-t border-slate-100 p-2">
-                  {sortedItems.map((item, index) => (
+                  {mapItems.map((item, index) => (
                     <div key={item.id}>
                       <button
                         type="button"
@@ -483,13 +503,13 @@ export function TravelPlanWorkspace({
                             <PlusIcon size={14} weight="bold" />
                           </button>
                         )}
-                        {index < sortedItems.length - 1 ? <span className="h-1.5 border-l border-dashed border-slate-200" /> : null}
+                        {index < mapItems.length - 1 ? <span className="h-1.5 border-l border-dashed border-slate-200" /> : null}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">点击右侧日历时间格，或使用下方按钮添加第一个地点。</p>
+                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">还没有带地点的行程。可点击下方按钮添加。</p>
               )}
               <div className="flex justify-center border-t border-slate-100 px-3 py-3">
                 <button type="button" className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition hover:bg-blue-100 hover:ring-blue-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={addItineraryFromMap} aria-label="从旅行地图添加行程" title="添加行程">
@@ -611,9 +631,13 @@ export function TravelPlanWorkspace({
               ...data.itinerary.filter((current) => current.id !== item.id),
               item,
             ]);
-            setFocusedItemId(item.id);
-            const itemWeek = getMondayDateString(item.date);
-            if (itemWeek !== weekStart) onWeekChange(itemWeek);
+            if (isScheduledItem(item)) {
+              if (isLocatedItem(item)) setFocusedItemId(item.id);
+              const itemWeek = getMondayDateString(item.date);
+              if (itemWeek !== weekStart) onWeekChange(itemWeek);
+            } else {
+              setFocusedItemId((current) => current === item.id ? null : current);
+            }
             setDraft(null);
           }}
           onDeleted={(itemId) => {

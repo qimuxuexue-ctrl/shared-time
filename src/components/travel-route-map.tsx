@@ -5,12 +5,21 @@ import { useEffect, useRef } from "react";
 
 import type { TravelItineraryItem } from "@/lib/types";
 
+type LocatedTravelItem = TravelItineraryItem & {
+  date: string;
+  startHour: number;
+  endHour: number;
+  placeName: string;
+  latitude: number;
+  longitude: number;
+};
+
 export function TravelRouteMap({
   items,
   focusedItemId,
   onSelect,
 }: {
-  items: TravelItineraryItem[];
+  items: LocatedTravelItem[];
   focusedItemId: string | null;
   onSelect: (itemId: string) => void;
 }) {
@@ -106,7 +115,7 @@ export function TravelRouteMap({
   }, [focusedItemId, items]);
 
   if (items.length === 0) {
-    return <div className="grid h-56 place-items-center bg-slate-50 px-5 text-center text-xs leading-5 text-slate-400 lg:h-64">这一天还没有地点，先在日历中添加行程。</div>;
+    return <div className="grid h-56 place-items-center bg-slate-50 px-5 text-center text-xs leading-5 text-slate-400 lg:h-64">这一天还没有带地点的行程。</div>;
   }
 
   return <div ref={containerRef} className="h-56 w-full bg-slate-100 lg:h-64" aria-label="当天行程路线地图" />;

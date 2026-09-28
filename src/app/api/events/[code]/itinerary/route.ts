@@ -6,25 +6,32 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const itemFields = {
   identityId: z.uuid("身份 ID 不正确"),
-  date: z.string().refine(isValidDateString, "行程日期不正确"),
-  startHour: z.number().int().min(10).max(23),
-  endHour: z.number().int().min(11).max(24),
+  date: z.string().refine(isValidDateString, "行程日期不正确").nullable(),
+  startHour: z.number().int().min(10).max(23).nullable(),
+  endHour: z.number().int().min(11).max(24).nullable(),
   title: z.string().trim().min(1, "请输入行程标题").max(80, "标题最多 80 个字符"),
   note: z.string().trim().max(300, "备注最多 300 个字符").default(""),
-  placeName: z.string().trim().min(1, "请选择地点").max(120),
-  address: z.string().trim().max(300).default(""),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  placeName: z.string().trim().min(1).max(120).nullable(),
+  address: z.string().trim().max(300).nullable(),
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
 };
 
-const createSchema = z.object(itemFields).refine(
-  (value) => value.endHour > value.startHour,
-  { message: "结束时间必须晚于开始时间" },
-);
-const updateSchema = z.object({ itemId: z.uuid("行程 ID 不正确"), ...itemFields }).refine(
-  (value) => value.endHour > value.startHour,
-  { message: "结束时间必须晚于开始时间" },
-);
+function validateItem(value: { date: string | null; startHour: number | null; endHour: number | null; placeName: string | null; latitude: number | null; longitude: number | null }, context: z.RefinementCtx) {
+  const scheduleValues = [value.date, value.startHour, value.endHour];
+  if (scheduleValues.some((item) => item !== null) && scheduleValues.some((item) => item === null)) {
+    context.addIssue({ code: "custom", message: "请填写完整的日期和时间" });
+  } else if (value.startHour !== null && value.endHour !== null && value.endHour <= value.startHour) {
+    context.addIssue({ code: "custom", message: "结束时间必须晚于开始时间" });
+  }
+  const locationValues = [value.placeName, value.latitude, value.longitude];
+  if (locationValues.some((item) => item !== null) && locationValues.some((item) => item === null)) {
+    context.addIssue({ code: "custom", message: "地点信息不完整，请重新选择地点或清空地点" });
+  }
+}
+
+const createSchema = z.object(itemFields).superRefine(validateItem);
+const updateSchema = z.object({ itemId: z.uuid("行程 ID 不正确"), ...itemFields }).superRefine(validateItem);
 const deleteSchema = z.object({
   identityId: z.uuid("身份 ID 不正确"),
   itemId: z.uuid("行程 ID 不正确"),
@@ -68,7 +75,7 @@ async function getContext(code: string, identityId: string) {
 
 function validateContext(
   context: Awaited<ReturnType<typeof getContext>>,
-  date?: string,
+  date?: string | null,
 ) {
   if (!context) return Response.json({ error: "事件不存在或你尚未加入" }, { status: 403 });
   if (context.event.workspace_kind !== "travel_plan") {
