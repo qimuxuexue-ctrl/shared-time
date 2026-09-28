@@ -166,6 +166,16 @@ export function TravelPlanWorkspace({
     focusedItem ? `${focusedItem.latitude},${focusedItem.longitude}` : data.event.name,
   );
 
+  const addItineraryFromMap = () => {
+    const date = activeRouteDate
+      ?? dates.find((current) => current >= data.event.startDate && current <= endDate)
+      ?? data.event.startDate;
+    const latestEndHour = sortedItems
+      .filter((item) => item.date === date)
+      .reduce((latest, item) => Math.max(latest, item.endHour), 10);
+    setDraft({ date, startHour: Math.min(23, latestEndHour) });
+  };
+
   const focusItem = (item: TravelItineraryItem) => {
     setFocusedItemId(item.id);
     if (mapMode === "route") setRouteDate(item.date);
@@ -479,8 +489,13 @@ export function TravelPlanWorkspace({
                   ))}
                 </div>
               ) : (
-                <p className="border-t border-slate-100 px-4 py-3 text-xs leading-5 text-slate-400">点击右侧旅行日历中的时间格，添加第一个地点。</p>
+                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">点击右侧日历时间格，或使用下方按钮添加第一个地点。</p>
               )}
+              <div className="flex justify-center border-t border-slate-100 px-3 py-3">
+                <button type="button" className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition hover:bg-blue-100 hover:ring-blue-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={addItineraryFromMap} aria-label="从旅行地图添加行程" title="添加行程">
+                  <PlusIcon size={18} weight="bold" />
+                </button>
+              </div>
             </section>
 
             <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
@@ -597,6 +612,8 @@ export function TravelPlanWorkspace({
               item,
             ]);
             setFocusedItemId(item.id);
+            const itemWeek = getMondayDateString(item.date);
+            if (itemWeek !== weekStart) onWeekChange(itemWeek);
             setDraft(null);
           }}
           onDeleted={(itemId) => {
