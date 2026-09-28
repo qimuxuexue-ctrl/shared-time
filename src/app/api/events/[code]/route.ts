@@ -108,7 +108,10 @@ export async function GET(
   const currentWeekStart = getMondayDateString(
     getDateStringInTimeZone(event.time_zone),
   );
-  const requestedWeekStart = parsed.data.weekStart ?? currentWeekStart;
+  const requestedWeekStart = parsed.data.weekStart
+    ?? (event.workspace_kind === "travel_plan"
+      ? getMondayDateString(event.start_date)
+      : currentWeekStart);
   const weekStart = event.workspace_kind === "travel_plan"
     ? requestedWeekStart
     : requestedWeekStart < event.start_date

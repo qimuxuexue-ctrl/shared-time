@@ -459,16 +459,15 @@ export function EventWorkspace({ code }: { code: string }) {
   const saveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const flushPendingUpdatesRef = useRef<() => Promise<void>>(async () => {});
+  const initialWeekResolvedRef = useRef(false);
 
   const loadWorkspace = useCallback(
-    async (activeIdentity: Identity, requestedWeek: string, silent = false) => {
+    async (activeIdentity: Identity, requestedWeek?: string, silent = false) => {
       if (!silent) setLoading(true);
 
       try {
-        const query = new URLSearchParams({
-          identityId: activeIdentity.id,
-          weekStart: requestedWeek,
-        });
+        const query = new URLSearchParams({ identityId: activeIdentity.id });
+        if (requestedWeek) query.set("weekStart", requestedWeek);
         const response = await fetch(`/api/events/${code}?${query}`);
         const payload = (await response.json()) as EventWorkspaceData & {
           error?: string;
@@ -506,6 +505,7 @@ export function EventWorkspace({ code }: { code: string }) {
         dataRef.current = nextData;
         setData(nextData);
         setJoinRequired(false);
+        initialWeekResolvedRef.current = true;
         if (payload.weekStart !== requestedWeek) {
           setWeekStart(payload.weekStart);
         }
@@ -542,12 +542,13 @@ export function EventWorkspace({ code }: { code: string }) {
 
   useEffect(() => {
     if (!identity) return;
+    const requestedWeek = initialWeekResolvedRef.current ? weekStart : undefined;
 
     const initialLoad = window.setTimeout(() => {
-      void loadWorkspace(identity, weekStart);
+      void loadWorkspace(identity, requestedWeek);
     }, 0);
     const timer = window.setInterval(() => {
-      void loadWorkspace(identity, weekStart, true);
+      void loadWorkspace(identity, requestedWeek, true);
     }, 5000);
 
     return () => {
