@@ -65,7 +65,7 @@ function formatTimeRange(startHour: number, durationMinutes: number | null) {
   return `${String(startHour).padStart(2, "0")}:00–${end}`;
 }
 
-export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving, onCopy, onDelete, onLeave, onEditTag, onTimeZoneChange }: {
+export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving, onCopy, onDelete, onLeave, onEditName, onEditTag, onTimeZoneChange }: {
   data: EventWorkspaceData;
   identityId: string;
   copied: boolean;
@@ -73,6 +73,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   onCopy: () => void;
   onDelete: () => void;
   onLeave: () => void;
+  onEditName: () => void;
   onEditTag: () => void;
   onTimeZoneChange: (timeZone: EventTimeZone) => void;
 }) {
@@ -152,7 +153,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   return <main className="min-h-[100dvh] bg-[var(--page)] pb-10">
     <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
       <div className="mx-auto flex min-h-[72px] max-w-[1480px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3"><Link href="/" className="icon-button shrink-0" aria-label="返回我的事件"><ArrowLeftIcon size={18} weight="bold" /></Link><div className="min-w-0"><h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">{data.event.name}</h1><p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-slate-500"><HashIcon size={12} weight="bold" />{data.event.shareCode}</p></div></div>
+        <div className="flex min-w-0 items-center gap-3"><Link href="/" className="icon-button shrink-0" aria-label="返回我的事件"><ArrowLeftIcon size={18} weight="bold" /></Link><div className="min-w-0"><div className="flex min-w-0 items-center gap-1"><h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">{data.event.name}</h1>{data.event.isCreator ? <button type="button" className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-blue-600" onClick={onEditName} aria-label="修改事件名称" title="修改事件名称"><PencilSimpleIcon size={13} weight="bold" /></button> : null}</div><p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-slate-500"><HashIcon size={12} weight="bold" />{data.event.shareCode}</p></div></div>
         <EventPresence code={data.event.shareCode} identityId={identityId} />
         <div className="flex shrink-0 items-center gap-2"><button type="button" className="secondary-button text-red-600 hover:border-red-200 hover:bg-red-50" onClick={data.event.isCreator ? onDelete : onLeave}>{data.event.isCreator ? <TrashIcon size={18} weight="bold" /> : <SignOutIcon size={18} weight="bold" />}<span className="hidden sm:inline">{data.event.isCreator ? "删除事件" : "退出事件"}</span></button><button type="button" className="secondary-button" onClick={onCopy}>{copied ? <CheckIcon size={18} weight="bold" /> : <CopyIcon size={18} weight="bold" />}<span className="hidden sm:inline">{copied ? "已复制" : "分享事件"}</span></button></div>
       </div>

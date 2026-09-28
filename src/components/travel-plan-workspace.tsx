@@ -99,6 +99,7 @@ export function TravelPlanWorkspace({
   onCopy,
   onDelete,
   onLeave,
+  onEditName,
   onEditTag,
   onTimeZoneChange,
   onTravelDatesChange,
@@ -116,6 +117,7 @@ export function TravelPlanWorkspace({
   onCopy: () => void;
   onDelete: () => void;
   onLeave: () => void;
+  onEditName: () => void;
   onEditTag: () => void;
   onTimeZoneChange: (timeZone: EventTimeZone) => void;
   onTravelDatesChange: (startDate: string, endDate: string) => Promise<void>;
@@ -297,7 +299,7 @@ export function TravelPlanWorkspace({
               <ArrowLeftIcon size={18} weight="bold" />
             </Link>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">{data.event.name}</h1>
+              <div className="flex min-w-0 items-center gap-1"><h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">{data.event.name}</h1>{data.event.isCreator ? <button type="button" className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-blue-600" onClick={onEditName} aria-label="修改事件名称" title="修改事件名称"><PencilSimpleIcon size={13} weight="bold" /></button> : null}</div>
               <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-slate-500">
                 <HashIcon size={12} weight="bold" />{data.event.shareCode}
               </p>

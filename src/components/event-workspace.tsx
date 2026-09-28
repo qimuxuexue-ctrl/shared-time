@@ -417,6 +417,9 @@ export function EventWorkspace({ code }: { code: string }) {
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingEventName, setEditingEventName] = useState(false);
+  const [eventNameSaving, setEventNameSaving] = useState(false);
+  const [eventNameError, setEventNameError] = useState("");
   const [timeZoneSaving, setTimeZoneSaving] = useState(false);
   const [travelDatesSaving, setTravelDatesSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1017,6 +1020,43 @@ export function EventWorkspace({ code }: { code: string }) {
     }
   };
 
+  const saveEventName = async (name: string) => {
+    if (!identity || !data) return;
+    const nextName = name.trim();
+    if (!nextName) {
+      setEventNameError("请输入事件名称");
+      return;
+    }
+    if (nextName === data.event.name) {
+      setEditingEventName(false);
+      return;
+    }
+    setEventNameSaving(true);
+    setEventNameError("");
+    try {
+      const response = await fetch(`/api/events/${code}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identityId: identity.id, name: nextName }),
+      });
+      const payload = (await response.json()) as { name?: string; error?: string };
+      if (!response.ok || !payload.name) {
+        throw new Error(payload.error ?? "修改事件名称失败");
+      }
+      setData((current) => {
+        if (!current) return current;
+        const next = { ...current, event: { ...current.event, name: payload.name! } };
+        dataRef.current = next;
+        return next;
+      });
+      setEditingEventName(false);
+    } catch (caught) {
+      setEventNameError(caught instanceof Error ? caught.message : "修改事件名称失败");
+    } finally {
+      setEventNameSaving(false);
+    }
+  };
+
   const saveTravelDates = async (startDate: string, endDate: string) => {
     if (!identity || !data) return;
     setTravelDatesSaving(true);
@@ -1359,6 +1399,10 @@ export function EventWorkspace({ code }: { code: string }) {
             setLeaveEventError("");
             setShowLeaveConfirm(true);
           }}
+          onEditName={() => {
+            setEventNameError("");
+            setEditingEventName(true);
+          }}
           onEditTag={() => {
             setMemberError("");
             setEditingMember(true);
@@ -1404,12 +1448,18 @@ export function EventWorkspace({ code }: { code: string }) {
             setLeaveEventError("");
             setShowLeaveConfirm(true);
           }}
+          onEditName={() => {
+            setEventNameError("");
+            setEditingEventName(true);
+          }}
           onEditTag={() => {
             setMemberError("");
             setEditingMember(true);
           }}
           onTimeZoneChange={(timeZone) => void saveTimeZone(timeZone)}
         />}
+
+        {editingEventName ? <EventNameModal initialName={data.event.name} saving={eventNameSaving} error={eventNameError} onClose={() => { if (!eventNameSaving) setEditingEventName(false); }} onSave={(name) => void saveEventName(name)} /> : null}
 
         {showDeleteConfirm ? (
           <DeleteEventModal
@@ -1466,9 +1516,12 @@ export function EventWorkspace({ code }: { code: string }) {
               <ArrowLeftIcon size={18} weight="bold" />
             </Link>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">
-                {data.event.name}
-              </h1>
+              <div className="flex min-w-0 items-center gap-1">
+                <h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">
+                  {data.event.name}
+                </h1>
+                {data.event.isCreator ? <button type="button" className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-blue-600" onClick={() => { setEventNameError(""); setEditingEventName(true); }} aria-label="修改事件名称" title="修改事件名称"><PencilSimpleIcon size={13} weight="bold" /></button> : null}
+              </div>
               <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-slate-500">
                 <HashIcon size={12} weight="bold" />
                 {data.event.shareCode}
@@ -2107,6 +2160,8 @@ export function EventWorkspace({ code }: { code: string }) {
           </section>
         </div>
       </div>
+
+      {editingEventName ? <EventNameModal initialName={data.event.name} saving={eventNameSaving} error={eventNameError} onClose={() => { if (!eventNameSaving) setEditingEventName(false); }} onSave={(name) => void saveEventName(name)} /> : null}
 
       {deletingNote ? (
         <Modal title="删除这条备注？" onClose={() => { if (!noteSaving) setDeletingNote(false); }}>
@@ -2835,6 +2890,25 @@ function SharedLinkEntry({
       </section>
     </main>
   );
+}
+
+function EventNameModal({ initialName, saving, error, onClose, onSave }: {
+  initialName: string;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState(initialName);
+  return <Modal title="修改事件名称" onClose={onClose}>
+    <form onSubmit={(event) => { event.preventDefault(); onSave(name); }}>
+      <label htmlFor="edit-event-name" className="field-label">事件名称</label>
+      <input id="edit-event-name" className="text-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} autoFocus disabled={saving} />
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-400"><span>修改后所有参与者都会看到新名称。</span><span className="tabular-nums">{name.length}/80</span></div>
+      {error ? <p className="form-error mt-4">{error}</p> : null}
+      <button type="submit" className="primary-button mt-6 w-full justify-center" disabled={saving || !name.trim()}>{saving ? "正在保存" : "保存名称"}</button>
+    </form>
+  </Modal>;
 }
 
 function TagSettingsModal({

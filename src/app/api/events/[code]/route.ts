@@ -32,6 +32,11 @@ const updateTimeZoneSchema = z.object({
   timeZone: z.enum(["Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo"]),
 });
 
+const updateNameSchema = z.object({
+  identityId: z.uuid("身份 ID 不正确"),
+  name: z.string().trim().min(1, "请输入事件名称").max(80, "事件名称最多 80 个字"),
+});
+
 const updateTravelDatesSchema = z.object({
   identityId: z.uuid("身份 ID 不正确"),
   startDate: z.string().refine(isValidDateString, "开始日期不正确"),
@@ -314,20 +319,27 @@ export async function PATCH(
   }
 
   const payload = await request.json().catch(() => null);
+  const nameUpdate = updateNameSchema.safeParse(payload);
   const timeZoneUpdate = updateTimeZoneSchema.safeParse(payload);
   const travelDatesUpdate = updateTravelDatesSchema.safeParse(payload);
 
-  if (!timeZoneUpdate.success && !travelDatesUpdate.success) {
+  if (!nameUpdate.success && !timeZoneUpdate.success && !travelDatesUpdate.success) {
     return validationError(
-      "timeZone" in (payload ?? {}) ? timeZoneUpdate.error : travelDatesUpdate.error,
+      "name" in (payload ?? {})
+        ? nameUpdate.error
+        : "timeZone" in (payload ?? {})
+          ? timeZoneUpdate.error
+          : travelDatesUpdate.error,
     );
   }
 
-  const identityId = timeZoneUpdate.success
-    ? timeZoneUpdate.data.identityId
-    : travelDatesUpdate.success
-      ? travelDatesUpdate.data.identityId
-      : "";
+  const identityId = nameUpdate.success
+    ? nameUpdate.data.identityId
+    : timeZoneUpdate.success
+      ? timeZoneUpdate.data.identityId
+      : travelDatesUpdate.success
+        ? travelDatesUpdate.data.identityId
+        : "";
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from("events")
@@ -348,6 +360,20 @@ export async function PATCH(
       { error: "只有事件创建者可以修改事件设置" },
       { status: 403 },
     );
+  }
+
+  if (nameUpdate.success) {
+    const { data: updatedEvent, error: updateError } = await supabaseAdmin
+      .from("events")
+      .update({ name: nameUpdate.data.name })
+      .eq("id", event.id)
+      .eq("creator_identity_id", identityId)
+      .select("name")
+      .single<{ name: string }>();
+    if (updateError || !updatedEvent) {
+      return serverError("修改事件名称失败，请稍后重试");
+    }
+    return Response.json({ name: updatedEvent.name });
   }
 
   if (travelDatesUpdate.success) {
