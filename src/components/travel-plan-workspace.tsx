@@ -512,19 +512,22 @@ export function TravelPlanWorkspace({
                   allowFullScreen
                 />
               )}
-              {mapItems.length > 0 ? (
+              {sortedItems.length > 0 ? (
                 <div className="max-h-60 space-y-1.5 overflow-y-auto border-t border-slate-100 p-2">
-                  {mapItems.map((item, index) => (
-                    <div key={item.id}>
+                  {sortedItems.map((item, index) => {
+                    const located = isLocatedItem(item);
+                    const mapIndex = located ? mapItems.findIndex((current) => current.id === item.id) + 1 : null;
+                    const mapFocused = located && focusedItem?.id === item.id;
+                    return <div key={item.id}>
                       <button
                         type="button"
-                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${focusedItem?.id === item.id ? "border-blue-300 bg-[#eaf3ff] text-blue-700 shadow-[0_4px_14px_rgba(59,130,246,0.08)]" : "border-blue-100 bg-[#f5f9fe] text-slate-600 hover:border-blue-200 hover:bg-[#eef5fc]"}`}
-                        onClick={() => focusItem(item)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${mapFocused ? "border-blue-300 bg-[#eaf3ff] text-blue-700 shadow-[0_4px_14px_rgba(59,130,246,0.08)]" : "border-blue-100 bg-[#f5f9fe] text-slate-600 hover:border-blue-200 hover:bg-[#eef5fc]"}`}
+                        onClick={() => located ? focusItem(item) : setDraft(item)}
                       >
-                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-xs font-bold ${focusedItem?.id === item.id ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-blue-100"}`}>{index + 1}</span>
+                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-xs font-bold ${mapFocused ? "bg-blue-600 text-white" : located ? "bg-white text-slate-500 ring-1 ring-blue-100" : "bg-slate-100 text-slate-400 ring-1 ring-slate-200"}`}>{mapIndex ?? <MapPinIcon size={12} weight="bold" />}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block break-words text-sm font-semibold">{item.title}</span>
-                          <span className="mt-0.5 block break-words text-xs text-slate-400">{item.placeName}</span>
+                          <span className="mt-0.5 block break-words text-xs text-slate-400">{item.placeName ?? "未添加地点 · 点击补充"}</span>
                           <span className="mt-0.5 block text-xs tabular-nums text-slate-400">{formatShortDate(item.date)} · {String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
                         </span>
                       </button>
@@ -541,13 +544,13 @@ export function TravelPlanWorkspace({
                             <PlusIcon size={14} weight="bold" />
                           </button>
                         )}
-                        {index < mapItems.length - 1 ? <span className="h-1.5 border-l border-dashed border-slate-200" /> : null}
+                        {index < sortedItems.length - 1 ? <span className="h-1.5 border-l border-dashed border-slate-200" /> : null}
                       </div>
-                    </div>
-                  ))}
+                    </div>;
+                  })}
                 </div>
               ) : (
-                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">还没有带地点的行程。可点击下方按钮添加。</p>
+                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">还没有已安排的行程。可点击下方按钮添加。</p>
               )}
               <div className="flex justify-center border-t border-slate-100 px-3 py-3">
                 <button type="button" className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition hover:bg-blue-100 hover:ring-blue-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={addItineraryFromMap} aria-label="从旅行地图添加行程" title="添加行程">
