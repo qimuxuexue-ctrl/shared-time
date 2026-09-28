@@ -308,8 +308,8 @@ try {
     tagName: "Test learner",
     workspaceKind: "habit_tracker",
     habits: [
-      { title: "Vocabulary", frequency: "daily", targetCount: 2 },
-      { title: "Reading", frequency: "weekly", targetCount: 3 },
+      { title: "Vocabulary", frequency: "daily", targetCount: 2, durationMinutes: 90 },
+      { title: "Reading", frequency: "weekly", targetCount: 3, durationMinutes: null },
     ],
   });
   habitEventId = habitEvent.event.id;
@@ -324,12 +324,12 @@ try {
   const today = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
   const month = today.slice(0, 7);
   const ownHabits = await (await fetch(`${habitUrl}?identityId=${identityId}&month=${month}`)).json();
-  if (ownHabits.habits?.length !== 2 || ownHabits.checkins?.length !== 0) {
+  if (ownHabits.habits?.length !== 2 || ownHabits.habits[0].durationMinutes !== 90 || ownHabits.checkins?.length !== 0) {
     throw new Error("Created habit list was not saved.");
   }
   const stamp = await fetch(habitUrl, {
     method: "PATCH", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ identityId, habitId: ownHabits.habits[0].id, date: today, count: 1 }),
+    body: JSON.stringify({ identityId, habitId: ownHabits.habits[0].id, date: today, startHour: 10, count: 1 }),
   });
   if (!stamp.ok) throw new Error("Habit check-in failed.");
   const otherHabits = await (await fetch(`${habitUrl}?identityId=${otherIdentityIds[0]}&month=${month}`)).json();

@@ -135,6 +135,7 @@ export async function POST(request: Request) {
           title: habit.title,
           frequency: habit.frequency,
           target_count: habit.targetCount,
+          duration_minutes: habit.durationMinutes,
           created_at: new Date(createdAt + index).toISOString(),
         })),
       );

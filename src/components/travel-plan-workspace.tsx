@@ -30,6 +30,7 @@ import {
 } from "react";
 
 import { EventPresence } from "@/components/event-presence";
+import { CALENDAR_HOUR_HEIGHT, DurationCalendarBlock } from "@/components/duration-calendar-block";
 import { Modal } from "@/components/modal";
 import { TravelItineraryModal } from "@/components/travel-itinerary-modal";
 import { TravelJourneyModal } from "@/components/travel-journey-modal";
@@ -526,20 +527,19 @@ export function TravelPlanWorkspace({
                     </div>;
                   })}
                 </div>
-                {HOURS.map((hour) => (
-                  <div key={hour} className="grid min-h-20 grid-cols-[68px_repeat(7,minmax(96px,1fr))]">
-                    <div className="border-b border-slate-100 px-2 pt-3 text-right text-xs tabular-nums text-slate-400">{String(hour).padStart(2, "0")}:00</div>
-                    {dates.map((date) => {
-                      const locked = date < data.event.startDate || date > endDate;
-                      const items = sortedItems.filter((item) => item.date === date && item.startHour === hour);
-                      return (
-                        <div
+                <div className="relative" style={{ height: HOURS.length * CALENDAR_HOUR_HEIGHT }}>
+                  {HOURS.map((hour) => (
+                    <div key={hour} className="grid h-20 grid-cols-[68px_repeat(7,minmax(96px,1fr))]">
+                      <div className="border-b border-slate-100 px-2 pt-3 text-right text-xs tabular-nums text-slate-400">{String(hour).padStart(2, "0")}:00</div>
+                      {dates.map((date) => {
+                        const locked = date < data.event.startDate || date > endDate;
+                        return <div
                           key={`${date}-${hour}`}
                           data-trip-date={date}
                           data-trip-hour={hour}
                           data-trip-locked={locked ? "true" : "false"}
                           aria-disabled={locked}
-                          className={`min-h-20 border-b border-l border-slate-100 p-1.5 ${locked ? "bg-slate-50/80" : dragTarget?.date === date && dragTarget.startHour === hour ? "cursor-pointer bg-blue-100/70 shadow-[inset_0_0_0_2px_rgba(59,130,246,0.55)]" : "cursor-pointer bg-white transition hover:bg-blue-50/40"}`}
+                          className={`h-20 border-b border-l border-slate-100 ${locked ? "bg-slate-50/80" : dragTarget?.date === date && dragTarget.startHour === hour ? "cursor-pointer bg-blue-100/70 shadow-[inset_0_0_0_2px_rgba(59,130,246,0.55)]" : "cursor-pointer bg-white transition hover:bg-blue-50/40"}`}
                           role={locked ? undefined : "button"}
                           tabIndex={locked ? undefined : 0}
                           onClick={() => { if (!locked) setDraft({ date, startHour: hour }); }}
@@ -549,37 +549,35 @@ export function TravelPlanWorkspace({
                               setDraft({ date, startHour: hour });
                             }
                           }}
-                        >
-                          <div className="space-y-1">
-                            {items.map((item) => (
-                              <button
-                                key={item.id}
-                                type="button"
-                                className={`flex w-full min-w-0 touch-none select-none flex-col items-start rounded-lg border px-2.5 py-2 text-left transition ${movingItemId === item.id ? "cursor-wait opacity-55" : dragPreview?.item.id === item.id ? "cursor-grabbing opacity-40" : "cursor-grab active:cursor-grabbing"} ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
-                                onPointerDown={(event) => startDragging(event, item)}
-                                onPointerMove={updateDragTarget}
-                                onPointerUp={finishDragging}
-                                onPointerCancel={cancelDragging}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (suppressClickRef.current) return;
-                                  focusItem(item);
-                                  setDraft(item);
-                                }}
-                              >
-                                <span className="w-full whitespace-normal break-words text-sm font-semibold leading-5">{item.title}</span>
-                                {item.note ? (
-                                  <span className="mt-1 w-full whitespace-pre-wrap break-words text-[11px] leading-[1.45] text-slate-500">{item.note}</span>
-                                ) : null}
-                                <span className="mt-1.5 block text-[10px] tabular-nums text-slate-500">{String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                        />;
+                      })}
+                    </div>
+                  ))}
+                  {sortedItems.filter((item) => dates.includes(item.date)).map((item) => {
+                    const sameStart = sortedItems.filter((current) => current.date === item.date && current.startHour === item.startHour);
+                    const laneIndex = sameStart.findIndex((current) => current.id === item.id);
+                    return <DurationCalendarBlock key={item.id} dayIndex={dates.indexOf(item.date)} startHour={item.startHour} durationMinutes={(item.endHour - item.startHour) * 60} laneIndex={laneIndex} laneCount={sameStart.length} className={dragPreview?.item.id === item.id ? "pointer-events-none" : ""}>
+                      <button
+                        type="button"
+                        className={`flex size-full min-w-0 touch-none select-none flex-col items-start overflow-hidden rounded-lg border px-2.5 py-2 text-left shadow-[0_4px_14px_rgba(37,99,235,0.08)] transition ${movingItemId === item.id ? "cursor-wait opacity-55" : dragPreview?.item.id === item.id ? "cursor-grabbing opacity-40" : "cursor-grab active:cursor-grabbing"} ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
+                        onPointerDown={(event) => startDragging(event, item)}
+                        onPointerMove={updateDragTarget}
+                        onPointerUp={finishDragging}
+                        onPointerCancel={cancelDragging}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (suppressClickRef.current) return;
+                          focusItem(item);
+                          setDraft(item);
+                        }}
+                      >
+                        <span className="w-full whitespace-normal break-words text-sm font-semibold leading-5">{item.title}</span>
+                        {item.note ? <span className="mt-1 w-full whitespace-pre-wrap break-words text-[11px] leading-[1.45] text-slate-500">{item.note}</span> : null}
+                        <span className="mt-auto block pt-1.5 text-[10px] tabular-nums text-slate-500">{String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
+                      </button>
+                    </DurationCalendarBlock>;
+                  })}
+                </div>
               </div>
             </div>
           </section>

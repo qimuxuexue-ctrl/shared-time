@@ -183,10 +183,12 @@ create table if not exists public.habits (
   title text not null,
   frequency text not null,
   target_count smallint not null,
+  duration_minutes smallint,
   created_at timestamptz not null default now(),
   constraint habits_title_length check (char_length(title) between 1 and 60),
   constraint habits_frequency_values check (frequency in ('daily', 'weekly', 'half_monthly', 'monthly')),
-  constraint habits_target_count_range check (target_count between 1 and 31)
+  constraint habits_target_count_range check (target_count between 1 and 31),
+  constraint habits_duration_minutes_values check (duration_minutes is null or duration_minutes in (10, 20, 30, 60, 90, 120, 150))
 );
 create index if not exists habits_event_id_idx on public.habits(event_id, created_at);
 alter table public.habits enable row level security;
@@ -196,12 +198,15 @@ create table if not exists public.habit_checkins (
   habit_id uuid not null references public.habits(id) on delete cascade,
   member_id uuid not null references public.event_members(id) on delete cascade,
   checkin_date date not null,
+  start_hour smallint,
   count smallint not null default 1,
   created_at timestamptz not null default now(),
-  constraint habit_checkins_unique unique (habit_id, member_id, checkin_date),
-  constraint habit_checkins_count_range check (count between 1 and 31)
+  constraint habit_checkins_count_range check (count between 1 and 31),
+  constraint habit_checkins_start_hour_range check (start_hour is null or start_hour between 10 and 23)
 );
 create index if not exists habit_checkins_member_date_idx on public.habit_checkins(member_id, checkin_date);
+create unique index if not exists habit_checkins_timed_unique on public.habit_checkins(habit_id, member_id, checkin_date, start_hour) where start_hour is not null;
+create unique index if not exists habit_checkins_untimed_unique on public.habit_checkins(habit_id, member_id, checkin_date) where start_hour is null;
 alter table public.habit_checkins enable row level security;
 
 create table if not exists public.availabilities (

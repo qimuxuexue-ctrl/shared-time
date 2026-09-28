@@ -36,7 +36,7 @@ import {
   getDateStringInTimeZone,
   getEventTimeZoneLabel,
 } from "@/lib/dates";
-import { HABIT_FREQUENCIES, type HabitFrequency } from "@/lib/habits";
+import { HABIT_DURATION_OPTIONS, HABIT_FREQUENCIES, type HabitDurationMinutes, type HabitFrequency } from "@/lib/habits";
 import type {
   EventSummary,
   EventTimeZone,
@@ -646,7 +646,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
   const today = getDateStringInTimeZone(timeZone);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
-  const [habits, setHabits] = useState<{ id: number; title: string; frequency: HabitFrequency; targetCount: number }[]>([]);
+  const [habits, setHabits] = useState<{ id: number; title: string; frequency: HabitFrequency; targetCount: number; durationMinutes: HabitDurationMinutes | null }[]>([]);
   const updateHabit = (id: number, update: Partial<(typeof habits)[number]>) => {
     setHabits((items) => items.map((habit) => habit.id === id ? { ...habit, ...update } : habit));
   };
@@ -669,7 +669,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           endDate: workspaceKind === "travel_plan" ? endDate : undefined,
           habits: workspaceKind === "habit_tracker" ? habits
             .filter((habit) => habit.title.trim())
-            .map(({ title, frequency, targetCount }) => ({ title: title.trim(), frequency, targetCount })) : undefined,
+            .map(({ title, frequency, targetCount, durationMinutes }) => ({ title: title.trim(), frequency, targetCount, durationMinutes })) : undefined,
           timeZone,
         }),
       });
@@ -772,7 +772,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
                       <span className="text-xs font-semibold text-slate-600">习惯 {index + 1}</span>
                       <button type="button" className="rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setHabits((items) => items.filter((item) => item.id !== habit.id))} aria-label={`移除习惯 ${index + 1}`}><TrashIcon size={15} weight="bold" /></button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(90px,0.6fr)]">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(80px,0.55fr)_minmax(100px,0.75fr)]">
                       <input className="text-input col-span-2 sm:col-span-1" value={habit.title} onChange={(event) => updateHabit(habit.id, { title: event.target.value })} placeholder="例如 背单词" maxLength={60} aria-label={`习惯 ${index + 1} 标题`} />
                       <select className="text-input" value={habit.frequency} onChange={(event) => { const frequency = event.target.value as HabitFrequency; const nextMax = HABIT_FREQUENCIES.find((item) => item.value === frequency)?.max ?? 1; updateHabit(habit.id, { frequency, targetCount: Math.min(habit.targetCount, nextMax) }); }} aria-label={`习惯 ${index + 1} 周期`}>
                         {HABIT_FREQUENCIES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -780,12 +780,16 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
                       <select className="text-input" value={habit.targetCount} onChange={(event) => updateHabit(habit.id, { targetCount: Number(event.target.value) })} aria-label={`习惯 ${index + 1} 次数`}>
                         {Array.from({ length: max }, (_, count) => count + 1).map((count) => <option key={count} value={count}>{count} 次</option>)}
                       </select>
+                      <select className="text-input" value={habit.durationMinutes ?? ""} onChange={(event) => updateHabit(habit.id, { durationMinutes: event.target.value ? Number(event.target.value) as HabitDurationMinutes : null })} aria-label={`习惯 ${index + 1} 每次时长`}>
+                        <option value="">不设时长</option>
+                        {HABIT_DURATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-left text-blue-700 transition hover:border-blue-200 hover:bg-blue-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:opacity-50" disabled={habits.length >= 20} onClick={() => setHabits((items) => [...items, { id: items.reduce((highest, item) => Math.max(highest, item.id), -1) + 1, title: "", frequency: "daily", targetCount: 1 }])}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-blue-100"><PlusIcon size={16} weight="bold" /></span><span><span className="block text-sm font-semibold">添加习惯</span><span className="mt-0.5 block text-xs font-normal text-blue-500">{habits.length ? "还可以继续添加下一项" : "例如背单词、运动或早睡"}</span></span></button>
+            <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-left text-blue-700 transition hover:border-blue-200 hover:bg-blue-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:opacity-50" disabled={habits.length >= 20} onClick={() => setHabits((items) => [...items, { id: items.reduce((highest, item) => Math.max(highest, item.id), -1) + 1, title: "", frequency: "daily", targetCount: 1, durationMinutes: null }])}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-blue-100"><PlusIcon size={16} weight="bold" /></span><span><span className="block text-sm font-semibold">添加习惯</span><span className="mt-0.5 block text-xs font-normal text-blue-500">{habits.length ? "还可以继续添加下一项" : "例如背单词、运动或早睡"}</span></span></button>
           </fieldset>
         )}
         <div>
