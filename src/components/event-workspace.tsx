@@ -460,10 +460,13 @@ export function EventWorkspace({ code }: { code: string }) {
   const saveInFlightRef = useRef(false);
   const flushPendingUpdatesRef = useRef<() => Promise<void>>(async () => {});
   const initialWeekResolvedRef = useRef(false);
+  const workspaceRequestIdRef = useRef(0);
 
   const loadWorkspace = useCallback(
     async (activeIdentity: Identity, requestedWeek?: string, silent = false) => {
-      if (!silent) setLoading(true);
+      const currentRequest = ++workspaceRequestIdRef.current;
+      const showPageLoader = !silent && !dataRef.current;
+      if (showPageLoader) setLoading(true);
 
       try {
         const query = new URLSearchParams({ identityId: activeIdentity.id });
@@ -482,6 +485,8 @@ export function EventWorkspace({ code }: { code: string }) {
         if (!response.ok) {
           throw new Error(payload.error ?? "无法读取事件");
         }
+
+        if (currentRequest !== workspaceRequestIdRef.current) return;
 
         if (
           silent &&
@@ -511,11 +516,13 @@ export function EventWorkspace({ code }: { code: string }) {
         }
         setError("");
       } catch (caught) {
-        if (!silent) {
+        if (!silent && currentRequest === workspaceRequestIdRef.current) {
           setError(caught instanceof Error ? caught.message : "无法读取事件");
         }
       } finally {
-        if (!silent) setLoading(false);
+        if (showPageLoader && currentRequest === workspaceRequestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
     [code],
