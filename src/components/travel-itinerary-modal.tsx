@@ -150,7 +150,7 @@ export function TravelItineraryModal({
       <form className="space-y-5" onSubmit={save}>
         <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-3 py-3">
           <div><p className="text-sm font-semibold text-slate-700">安排到日历</p><p className="mt-0.5 text-xs text-slate-400">关闭后会先保存在“未定行程”。</p></div>
-          <button type="button" role="switch" aria-checked={scheduled} className={`relative h-7 w-12 shrink-0 rounded-full transition ${scheduled ? "bg-blue-600" : "bg-slate-300"}`} onClick={() => setScheduled((current) => !current)}><span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${scheduled ? "translate-x-6" : "translate-x-1"}`} /></button>
+          <button type="button" role="switch" aria-checked={scheduled} className={`relative h-7 w-12 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${scheduled ? "bg-blue-600" : "bg-slate-300"}`} onClick={() => setScheduled((current) => !current)}><span className={`absolute left-0 top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${scheduled ? "translate-x-6" : "translate-x-1"}`} /></button>
         </div>
 
         {scheduled ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_0.8fr_0.8fr]">
