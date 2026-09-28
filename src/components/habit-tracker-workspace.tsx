@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ArrowLeftIcon, CalendarBlankIcon, CaretLeftIcon, CaretRightIcon,
+  ArrowLeftIcon, CaretLeftIcon, CaretRightIcon,
   CheckIcon, ClockIcon, CopyIcon, HashIcon, PencilSimpleIcon,
   PlusIcon, SignOutIcon, TrashIcon, UsersThreeIcon,
 } from "@phosphor-icons/react";
@@ -14,6 +14,7 @@ import {
 } from "@/components/duration-calendar-block";
 import { EventPresence } from "@/components/event-presence";
 import { Modal } from "@/components/modal";
+import { WeekPicker } from "@/components/week-picker";
 import { addDaysToDateString, EVENT_TIME_ZONE_OPTIONS, getDateStringInTimeZone, getMondayDateString } from "@/lib/dates";
 import {
   HABIT_DURATION_OPTIONS, HABIT_FREQUENCIES,
@@ -117,7 +118,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   };
 
   const toggleCheckin = async (habit: Habit, date: string, startHour: number) => {
-    if (date > today || date < data.event.startDate || savingKey) return;
+    if (savingKey) return;
     const existing = checkins.find((item) => item.habitId === habit.id && item.date === date && item.startHour === startHour);
     if (!existing && periodProgress(habit, date) >= habit.targetCount) {
       setError(`「${habit.title}」这个周期已完成 ${habit.targetCount} 次`);
@@ -179,12 +180,11 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
         </aside>
 
         <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white" aria-label="习惯周时间表">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3"><div><h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><CalendarBlankIcon size={17} weight="bold" />{formatShortDate(weekStart)}–{formatShortDate(addDaysToDateString(weekStart, 6))}</h2><p className="mt-1 text-xs text-slate-400">{activeHabit ? `当前：${activeHabit.title}` : "请先添加并选择习惯"}</p></div><div className="flex gap-2"><button type="button" className="icon-button" onClick={() => { setLoading(true); setWeekStart(addDaysToDateString(weekStart, -7)); }} aria-label="上一周"><CaretLeftIcon size={17} weight="bold" /></button><button type="button" className="icon-button" disabled={weekStart >= getMondayDateString(today)} onClick={() => { setLoading(true); setWeekStart(addDaysToDateString(weekStart, 7)); }} aria-label="下一周"><CaretRightIcon size={17} weight="bold" /></button></div></div>
-          <div className="overflow-x-auto"><div className="min-w-[820px]"><div className="grid grid-cols-[68px_repeat(7,minmax(96px,1fr))] border-b border-slate-200"><div />{dates.map((date, index) => <div key={date} className={`border-l border-slate-200 px-2 py-3 text-center ${date > today || date < data.event.startDate ? "bg-slate-50 text-slate-300" : "text-slate-700"}`}><span className="text-sm font-semibold">{WEEKDAYS[index]}</span><span className="ml-1 font-normal text-slate-400">{formatShortDate(date)}</span>{date === today ? <span className="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">今天</span> : null}</div>)}</div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3"><div><WeekPicker weekStart={weekStart} currentWeek={getMondayDateString(today)} onWeekChange={(nextWeek) => { setLoading(true); setWeekStart(nextWeek); }} /><p className="mt-1 text-xs text-slate-400">{activeHabit ? `当前：${activeHabit.title}` : "请先添加并选择习惯"}</p></div><div className="flex gap-2"><button type="button" className="icon-button" onClick={() => { setLoading(true); setWeekStart(addDaysToDateString(weekStart, -7)); }} aria-label="上一周"><CaretLeftIcon size={17} weight="bold" /></button><button type="button" className="icon-button" onClick={() => { setLoading(true); setWeekStart(addDaysToDateString(weekStart, 7)); }} aria-label="下一周"><CaretRightIcon size={17} weight="bold" /></button></div></div>
+          <div className="overflow-x-auto"><div className="min-w-[820px]"><div className="grid grid-cols-[68px_repeat(7,minmax(96px,1fr))] border-b border-slate-200"><div />{dates.map((date, index) => <div key={date} className="border-l border-slate-200 px-2 py-3 text-center text-slate-700"><span className="text-sm font-semibold">{WEEKDAYS[index]}</span><span className="ml-1 font-normal text-slate-400">{formatShortDate(date)}</span>{date === today ? <span className="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">今天</span> : null}</div>)}</div>
             <div className="relative" style={{ height: HOURS.length * CALENDAR_HOUR_HEIGHT }}>
               {HOURS.map((hour) => <div key={hour} className="grid h-20 grid-cols-[68px_repeat(7,minmax(96px,1fr))]"><div className="border-b border-slate-100 px-2 pt-3 text-right text-xs tabular-nums text-slate-400">{String(hour).padStart(2, "0")}:00</div>{dates.map((date) => {
-                const disabled = loading || date > today || date < data.event.startDate;
-                return <button key={`${date}-${hour}`} type="button" className={`h-20 border-b border-l border-slate-100 transition ${disabled ? "cursor-not-allowed bg-slate-50/80" : "bg-white hover:bg-blue-50/50"}`} disabled={disabled} onClick={() => activeHabit ? void toggleCheckin(activeHabit, date, hour) : setError("请先从左侧选择一个习惯")} aria-label={`${date} ${hour}:00${activeHabit ? ` 打卡 ${activeHabit.title}` : ""}`} />;
+                return <button key={`${date}-${hour}`} type="button" className="h-20 border-b border-l border-slate-100 bg-white transition hover:bg-blue-50/50 disabled:cursor-wait disabled:bg-slate-50/80" disabled={loading} onClick={() => activeHabit ? void toggleCheckin(activeHabit, date, hour) : setError("请先从左侧选择一个习惯")} aria-label={`${date} ${hour}:00${activeHabit ? ` 打卡 ${activeHabit.title}` : ""}`} />;
               })}</div>)}
               {checkins.filter((item) => item.startHour !== null && dates.includes(item.date)).map((checkin) => {
                 const habit = habits.find((item) => item.id === checkin.habitId);

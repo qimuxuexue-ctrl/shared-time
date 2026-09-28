@@ -32,6 +32,7 @@ import {
 import { EventPresence } from "@/components/event-presence";
 import { CALENDAR_HOUR_HEIGHT, DurationCalendarBlock } from "@/components/duration-calendar-block";
 import { Modal } from "@/components/modal";
+import { WeekPicker } from "@/components/week-picker";
 import { TravelItineraryModal } from "@/components/travel-itinerary-modal";
 import { TravelJourneyModal } from "@/components/travel-journey-modal";
 import { TravelPlanGuide } from "@/components/travel-plan-guide";
@@ -41,6 +42,7 @@ import { TravelTransportModal } from "@/components/travel-transport-modal";
 import {
   addDaysToDateString,
   EVENT_TIME_ZONE_OPTIONS,
+  getDateStringInTimeZone,
   getEventTimeZoneLabel,
   getMondayDateString,
 } from "@/lib/dates";
@@ -122,8 +124,7 @@ export function TravelPlanWorkspace({
   onJourneysChange: (journeys: TravelJourney[]) => void;
 }) {
   const endDate = data.event.endDate ?? data.event.startDate;
-  const firstWeek = getMondayDateString(data.event.startDate);
-  const lastWeek = getMondayDateString(endDate);
+  const currentWeek = getMondayDateString(getDateStringInTimeZone(data.event.timeZone));
   const dates = Array.from({ length: 7 }, (_, index) =>
     addDaysToDateString(weekStart, index),
   );
@@ -340,10 +341,6 @@ export function TravelPlanWorkspace({
               ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className="icon-button" disabled={weekStart <= firstWeek} onClick={() => onWeekChange(addDaysToDateString(weekStart, -7))} aria-label="上一周"><CaretLeftIcon size={18} weight="bold" /></button>
-            <button type="button" className="icon-button" disabled={weekStart >= lastWeek} onClick={() => onWeekChange(addDaysToDateString(weekStart, 7))} aria-label="下一周"><CaretRightIcon size={18} weight="bold" /></button>
-          </div>
         </section>
 
         <section className="mb-5 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white">
@@ -509,9 +506,9 @@ export function TravelPlanWorkspace({
           </aside>
 
           <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-800">旅行日历</p>
-              <p className="text-xs text-slate-400">行程外日期已锁定</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+              <div><p className="text-sm font-semibold text-slate-800">旅行日历</p><p className="mt-1 text-xs text-slate-400">行程外日期已锁定</p></div>
+              <div className="flex flex-wrap items-center justify-end gap-2"><WeekPicker weekStart={weekStart} currentWeek={currentWeek} onWeekChange={onWeekChange} /><button type="button" className="icon-button" onClick={() => onWeekChange(addDaysToDateString(weekStart, -7))} aria-label="上一周"><CaretLeftIcon size={18} weight="bold" /></button><button type="button" className="icon-button" onClick={() => onWeekChange(addDaysToDateString(weekStart, 7))} aria-label="下一周"><CaretRightIcon size={18} weight="bold" /></button></div>
             </div>
             {moveError ? <p className="form-error mx-4 mt-3">{moveError}</p> : null}
             <div className="overflow-x-auto">

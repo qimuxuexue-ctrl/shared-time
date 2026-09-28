@@ -34,6 +34,7 @@ import { DeleteEventModal } from "@/components/delete-event-modal";
 import { EventPresence } from "@/components/event-presence";
 import { LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
+import { WeekPicker } from "@/components/week-picker";
 import { TravelPlanWorkspace } from "@/components/travel-plan-workspace";
 import { HabitTrackerWorkspace } from "@/components/habit-tracker-workspace";
 import { readStoredIdentity, storeIdentity } from "@/lib/browser-identity";
@@ -101,13 +102,6 @@ function slotKey(date: string, startHour: number) {
 function formatShortDate(dateString: string) {
   const [, month, day] = dateString.split("-");
   return `${Number(month)}/${Number(day)}`;
-}
-
-function formatWeekRange(weekStart: string) {
-  const end = addDaysToDateString(weekStart, 6);
-  const startParts = weekStart.split("-").map(Number);
-  const endParts = end.split("-").map(Number);
-  return `${startParts[1]}月${startParts[2]}日 - ${endParts[1]}月${endParts[2]}日`;
 }
 
 function formatFinalDate(dateString: string) {
@@ -1548,9 +1542,7 @@ export function EventWorkspace({ code }: { code: string }) {
                 {data.event.eventType === "one_time" ? "一次性事件" : "常驻事件"}
               </span>
             </p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
-              {formatWeekRange(weekStart)}
-            </h2>
+            <div className="mt-2"><WeekPicker weekStart={weekStart} currentWeek={data.event.eventType === "one_time" ? weekStart : getMondayDateString(getDateStringInTimeZone(data.event.timeZone))} min={data.event.startDate} max={data.event.eventType === "one_time" ? data.event.startDate : undefined} onWeekChange={setWeekStart} /></div>
           </div>
           <div className="flex items-center gap-2">
             <button

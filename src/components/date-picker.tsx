@@ -25,13 +25,15 @@ function todayString() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
-export function DatePicker({ value, onChange, min, max, align = "left", ariaLabel }: {
+export function DatePicker({ value, onChange, min, max, align = "left", ariaLabel, compact = false, buttonLabel }: {
   value: string;
   onChange: (value: string) => void;
   min?: string;
   max?: string;
   align?: "left" | "right";
   ariaLabel: string;
+  compact?: boolean;
+  buttonLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(() => value.slice(0, 7));
@@ -60,9 +62,9 @@ export function DatePicker({ value, onChange, min, max, align = "left", ariaLabe
     setViewMonth(toDateString(month).slice(0, 7));
   };
 
-  return <div ref={rootRef} className="app-date-picker relative mt-1">
-    <button type="button" className="text-input flex items-center justify-between gap-3 text-left tabular-nums" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => { if (!open) setViewMonth(value.slice(0, 7)); setOpen((current) => !current); }}>
-      <span>{value.replaceAll("-", "/")}</span><CalendarBlankIcon size={17} weight="bold" className="shrink-0 text-slate-500" />
+  return <div ref={rootRef} className={`app-date-picker relative ${compact ? "" : "mt-1"}`}>
+    <button type="button" className={compact ? "inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold tabular-nums text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" : "text-input flex items-center justify-between gap-3 text-left tabular-nums"} aria-label={ariaLabel} title={compact ? ariaLabel : undefined} aria-haspopup="dialog" aria-expanded={open} onClick={() => { if (!open) setViewMonth(value.slice(0, 7)); setOpen((current) => !current); }}>
+      {compact ? <><CalendarBlankIcon size={17} weight="bold" className="shrink-0 text-slate-500" /><span>{buttonLabel ?? value.replaceAll("-", "/")}</span></> : <><span>{buttonLabel ?? value.replaceAll("-", "/")}</span><CalendarBlankIcon size={17} weight="bold" className="shrink-0 text-slate-500" /></>}
     </button>
     {open ? <div className={`absolute top-[calc(100%+0.5rem)] z-20 w-[min(18rem,calc(100vw-3rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(46,65,94,0.18)] ${align === "right" ? "right-0" : "left-0"}`} role="dialog" aria-label={`${ariaLabel}日历`}>
       <div className="flex items-center justify-between gap-3 pb-3">

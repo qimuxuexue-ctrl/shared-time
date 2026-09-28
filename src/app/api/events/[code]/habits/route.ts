@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { addDaysToDateString, getDateStringInTimeZone, getMondayDateString, isValidDateString } from "@/lib/dates";
+import { addDaysToDateString, getMondayDateString, isValidDateString } from "@/lib/dates";
 import { habitFieldsSchema } from "@/lib/habits";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -131,10 +131,6 @@ export async function PATCH(request: Request, route: RouteContext<"/api/events/[
   const context = await getContext(code.toUpperCase(), parsed.data.identityId);
   const invalid = invalidContext(context);
   if (invalid || !context) return invalid!;
-  const today = getDateStringInTimeZone(context.event.time_zone);
-  if (parsed.data.date < context.event.start_date || parsed.data.date > today) {
-    return Response.json({ error: "只能补记事件创建后、今天及之前的打卡" }, { status: 400 });
-  }
   const { data: habit, error: habitError } = await supabaseAdmin.from("habits")
     .select("id, frequency, target_count, duration_minutes").eq("id", parsed.data.habitId)
     .eq("event_id", context.event.id).maybeSingle();
