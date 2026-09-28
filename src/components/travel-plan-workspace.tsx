@@ -60,6 +60,7 @@ const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "
 type DragTarget = { date: string; startHour: number };
 type ScheduledTravelItem = TravelItineraryItem & { date: string; startHour: number; endHour: number };
 type LocatedTravelItem = ScheduledTravelItem & { placeName: string; address: string | null; latitude: number; longitude: number };
+type OverlapLayout = { index: number; count: number; itemIds: string[] };
 
 function isScheduledItem(item: TravelItineraryItem): item is ScheduledTravelItem {
   return item.date !== null && item.startHour !== null && item.endHour !== null;
@@ -67,6 +68,41 @@ function isScheduledItem(item: TravelItineraryItem): item is ScheduledTravelItem
 
 function isLocatedItem(item: ScheduledTravelItem): item is LocatedTravelItem {
   return item.placeName !== null && item.latitude !== null && item.longitude !== null;
+}
+
+function getOverlapLayouts(items: ScheduledTravelItem[]) {
+  const layouts = new Map<string, OverlapLayout>();
+  const itemsByDate = new Map<string, ScheduledTravelItem[]>();
+
+  items.forEach((item) => {
+    const dayItems = itemsByDate.get(item.date) ?? [];
+    dayItems.push(item);
+    itemsByDate.set(item.date, dayItems);
+  });
+
+  itemsByDate.forEach((dayItems) => {
+    const ordered = [...dayItems].sort((a, b) => a.startHour - b.startHour || b.endHour - a.endHour || a.createdAt.localeCompare(b.createdAt));
+    let group: ScheduledTravelItem[] = [];
+    let groupEnd = -1;
+
+    const saveGroup = () => {
+      const itemIds = group.map((item) => item.id);
+      group.forEach((item, index) => layouts.set(item.id, { index, count: group.length, itemIds }));
+    };
+
+    ordered.forEach((item) => {
+      if (group.length > 0 && item.startHour >= groupEnd) {
+        saveGroup();
+        group = [];
+        groupEnd = -1;
+      }
+      group.push(item);
+      groupEnd = Math.max(groupEnd, item.endHour);
+    });
+    if (group.length > 0) saveGroup();
+  });
+
+  return layouts;
 }
 
 type DragCandidate = {
@@ -153,6 +189,7 @@ export function TravelPlanWorkspace({
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const [moveError, setMoveError] = useState("");
+  const [raisedOverlapItemId, setRaisedOverlapItemId] = useState<string | null>(null);
   const dragCandidateRef = useRef<DragCandidate | null>(null);
   const dragTargetRef = useRef<DragTarget | null>(null);
   const suppressClickRef = useRef(false);
@@ -164,6 +201,7 @@ export function TravelPlanWorkspace({
     () => data.itinerary.filter((item): boolean => !isScheduledItem(item)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [data.itinerary],
   );
+  const overlapLayouts = useMemo(() => getOverlapLayouts(sortedItems), [sortedItems]);
   const mapItems = useMemo(() => sortedItems.filter(isLocatedItem), [sortedItems]);
   const focusedItem = mapItems.find((item) => item.id === focusedItemId) ?? mapItems[0];
   const itineraryDates = useMemo(
@@ -588,16 +626,21 @@ export function TravelPlanWorkspace({
                     </div>
                   ))}
                   {sortedItems.filter((item) => dates.includes(item.date)).map((item) => {
-                    const sameStart = sortedItems.filter((current) => current.date === item.date && current.startHour === item.startHour);
-                    const laneIndex = sameStart.findIndex((current) => current.id === item.id);
-                    return <DurationCalendarBlock key={item.id} dayIndex={dates.indexOf(item.date)} startHour={item.startHour} durationMinutes={(item.endHour - item.startHour) * 60} laneIndex={laneIndex} laneCount={sameStart.length} className={dragPreview?.item.id === item.id ? "pointer-events-none" : ""}>
+                    const overlap = overlapLayouts.get(item.id) ?? { index: 0, count: 1, itemIds: [item.id] };
+                    const raisedItemId = raisedOverlapItemId && overlap.itemIds.includes(raisedOverlapItemId)
+                      ? raisedOverlapItemId
+                      : overlap.itemIds.at(-1);
+                    const isRaised = raisedItemId === item.id;
+                    return <DurationCalendarBlock key={item.id} dayIndex={dates.indexOf(item.date)} startHour={item.startHour} durationMinutes={(item.endHour - item.startHour) * 60} laneIndex={overlap.index} laneCount={overlap.count} layout="stack" raised={isRaised} className={dragPreview?.item.id === item.id ? "pointer-events-none" : ""}>
                       <button
                         type="button"
-                        className={`flex min-h-full w-full min-w-0 touch-none select-none flex-col items-start rounded-lg border p-2.5 text-left shadow-[0_4px_14px_rgba(37,99,235,0.08)] transition ${movingItemId === item.id ? "cursor-wait opacity-55" : dragPreview?.item.id === item.id ? "cursor-grabbing opacity-40" : "cursor-grab active:cursor-grabbing"} ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
+                        className={`flex min-h-full w-full min-w-0 touch-none select-none flex-col items-start overflow-hidden rounded-lg border p-2.5 text-left transition-[border-color,background-color,box-shadow,transform,opacity] duration-200 ${isRaised && overlap.count > 1 ? "shadow-[0_8px_20px_rgba(37,99,235,0.16)] ring-1 ring-white/80" : "shadow-[0_4px_14px_rgba(37,99,235,0.08)]"} ${movingItemId === item.id ? "cursor-wait opacity-55" : dragPreview?.item.id === item.id ? "cursor-grabbing opacity-40" : "cursor-grab active:cursor-grabbing"} ${focusedItem?.id === item.id ? "border-blue-300 bg-blue-100 text-blue-800" : "border-blue-100 bg-blue-50 text-slate-700 hover:border-blue-200"}`}
                         onPointerDown={(event) => startDragging(event, item)}
                         onPointerMove={updateDragTarget}
                         onPointerUp={finishDragging}
                         onPointerCancel={cancelDragging}
+                        onPointerEnter={(event) => { if (event.pointerType === "mouse") setRaisedOverlapItemId(item.id); }}
+                        onFocus={() => setRaisedOverlapItemId(item.id)}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (suppressClickRef.current) return;
@@ -605,10 +648,22 @@ export function TravelPlanWorkspace({
                           setDraft(item);
                         }}
                       >
-                        <span className="w-full whitespace-normal break-words text-sm font-semibold leading-5">{item.title}</span>
+                        <span className={`w-full whitespace-normal break-words text-sm font-semibold leading-5 ${overlap.count > 1 ? "pr-9" : ""}`}>{item.title}</span>
                         {item.note ? <span className="mt-1 line-clamp-3 w-full whitespace-pre-wrap break-words text-[11px] leading-[1.45] text-slate-500">{item.note}</span> : null}
                         <span className="mt-1.5 block text-[10px] tabular-nums text-slate-500">{String(item.startHour).padStart(2, "0")}:00–{String(item.endHour).padStart(2, "0")}:00</span>
                       </button>
+                      {overlap.count > 1 && isRaised ? <button
+                        type="button"
+                        className="absolute right-1.5 top-1.5 z-10 rounded-md bg-white/90 px-1.5 py-1 text-[9px] font-semibold tabular-nums text-blue-600 shadow-sm ring-1 ring-blue-100 backdrop-blur transition hover:bg-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                        aria-label={`切换重叠的 ${overlap.count} 项行程`}
+                        title="切换重叠行程"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const currentIndex = overlap.itemIds.indexOf(item.id);
+                          setRaisedOverlapItemId(overlap.itemIds[(currentIndex + 1) % overlap.itemIds.length]);
+                        }}
+                      >{overlap.count} 项</button> : null}
                     </DurationCalendarBlock>;
                   })}
                 </div>
