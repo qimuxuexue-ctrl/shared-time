@@ -134,6 +134,14 @@ function getTripDayNumber(startDate: string, date: string) {
   return Math.floor((current - start) / 86_400_000) + 1;
 }
 
+function getTravelDateRange(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  for (let date = startDate; date <= endDate; date = addDaysToDateString(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+}
+
 export function TravelPlanWorkspace({
   data,
   identityId,
@@ -172,7 +180,8 @@ export function TravelPlanWorkspace({
   onJourneysChange: (journeys: TravelJourney[]) => void;
 }) {
   const endDate = data.event.endDate ?? data.event.startDate;
-  const currentWeek = getMondayDateString(getDateStringInTimeZone(data.event.timeZone));
+  const today = getDateStringInTimeZone(data.event.timeZone);
+  const currentWeek = getMondayDateString(today);
   const dates = Array.from({ length: 7 }, (_, index) =>
     addDaysToDateString(weekStart, index),
   );
@@ -204,17 +213,30 @@ export function TravelPlanWorkspace({
   const overlapLayouts = useMemo(() => getOverlapLayouts(sortedItems), [sortedItems]);
   const mapItems = useMemo(() => sortedItems.filter(isLocatedItem), [sortedItems]);
   const focusedItem = mapItems.find((item) => item.id === focusedItemId) ?? mapItems[0];
-  const itineraryDates = useMemo(
-    () => Array.from(new Set(mapItems.map((item) => item.date))),
-    [mapItems],
-  );
-  const activeRouteDate = routeDate && itineraryDates.includes(routeDate)
+  const travelDates = useMemo(() => getTravelDateRange(data.event.startDate, endDate), [data.event.startDate, endDate]);
+  const automaticRouteDate = today < data.event.startDate
+    ? data.event.startDate
+    : today > endDate
+      ? endDate
+      : today;
+  const activeRouteDate = routeDate && routeDate >= data.event.startDate && routeDate <= endDate
     ? routeDate
-    : focusedItem?.date ?? itineraryDates[0] ?? null;
+    : automaticRouteDate;
+  const hasManualRouteDate = routeDate === activeRouteDate && routeDate !== automaticRouteDate;
+  const automaticRouteHint = today < data.event.startDate
+    ? "旅行尚未开始，默认显示第一天。"
+    : today > endDate
+      ? "旅行已经结束，默认显示最后一天。"
+      : `已按${getEventTimeZoneLabel(data.event.timeZone, true)}自动显示今天。`;
+  const activeDayItems = useMemo(
+    () => sortedItems.filter((item) => item.date === activeRouteDate),
+    [activeRouteDate, sortedItems],
+  );
   const routeItems = useMemo(
-    () => activeRouteDate ? mapItems.filter((item) => item.date === activeRouteDate) : [],
+    () => mapItems.filter((item) => item.date === activeRouteDate),
     [activeRouteDate, mapItems],
   );
+  const visibleItineraryItems = mapMode === "route" ? activeDayItems : sortedItems;
   const mapQuery = encodeURIComponent(
     focusedItem ? `${focusedItem.latitude},${focusedItem.longitude}` : data.event.name,
   );
@@ -481,16 +503,23 @@ export function TravelPlanWorkspace({
                   <button type="button" className={`rounded-md px-2 py-1 transition ${mapMode === "route" ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setMapMode("route")}>当天路线</button>
                 </div>
               </div>
-              {mapMode === "route" && itineraryDates.length > 0 ? (
+              {mapMode === "route" ? (
                 <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-2">
-                  <select className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100" value={activeRouteDate ?? ""} onChange={(event) => {
+                  <div className="flex items-center gap-2">
+                  <select className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100" value={activeRouteDate} onChange={(event) => {
                     setRouteDate(event.target.value);
                     const firstItem = mapItems.find((item) => item.date === event.target.value);
-                    if (firstItem) setFocusedItemId(firstItem.id);
+                    setFocusedItemId(firstItem?.id ?? null);
                   }} aria-label="选择路线日期">
-                    {itineraryDates.map((date) => <option key={date} value={date}>{formatShortDate(date)} · {mapItems.filter((item) => item.date === date).length} 个地点</option>)}
+                    {travelDates.map((date) => <option key={date} value={date}>{formatShortDate(date)} · 第 {getTripDayNumber(data.event.startDate, date)} 天 · {sortedItems.filter((item) => item.date === date).length} 项</option>)}
                   </select>
-                  <p className="mt-1.5 text-[10px] leading-4 text-slate-400">按时间顺序连接地点，用于查看行程方向，不代表实际道路导航。</p>
+                  {hasManualRouteDate ? <button type="button" className="shrink-0 rounded-lg bg-blue-50 px-2.5 py-2 text-[11px] font-semibold text-blue-600 transition hover:bg-blue-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => {
+                    setRouteDate(null);
+                    const firstItem = mapItems.find((item) => item.date === automaticRouteDate);
+                    setFocusedItemId(firstItem?.id ?? null);
+                  }}>{today >= data.event.startDate && today <= endDate ? "回到今天" : today < data.event.startDate ? "查看第一天" : "查看最后一天"}</button> : null}
+                  </div>
+                  <p className="mt-1.5 text-[10px] leading-4 text-slate-400">{hasManualRouteDate ? "正在查看手动选择的日期。" : automaticRouteHint} 按时间顺序连接地点，不代表实际道路导航。</p>
                 </div>
               ) : null}
               {mapMode === "route" ? (
@@ -512,11 +541,12 @@ export function TravelPlanWorkspace({
                   allowFullScreen
                 />
               )}
-              {sortedItems.length > 0 ? (
+              {visibleItineraryItems.length > 0 ? (
                 <div className="max-h-60 space-y-1.5 overflow-y-auto border-t border-slate-100 p-2">
-                  {sortedItems.map((item, index) => {
+                  {visibleItineraryItems.map((item, index) => {
                     const located = isLocatedItem(item);
-                    const mapIndex = located ? mapItems.findIndex((current) => current.id === item.id) + 1 : null;
+                    const numberedMapItems = mapMode === "route" ? routeItems : mapItems;
+                    const mapIndex = located ? numberedMapItems.findIndex((current) => current.id === item.id) + 1 : null;
                     const mapFocused = located && focusedItem?.id === item.id;
                     return <div key={item.id}>
                       <button
@@ -544,13 +574,13 @@ export function TravelPlanWorkspace({
                             <PlusIcon size={14} weight="bold" />
                           </button>
                         )}
-                        {index < sortedItems.length - 1 ? <span className="h-1.5 border-l border-dashed border-slate-200" /> : null}
+                        {index < visibleItineraryItems.length - 1 ? <span className="h-1.5 border-l border-dashed border-slate-200" /> : null}
                       </div>
                     </div>;
                   })}
                 </div>
               ) : (
-                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">还没有已安排的行程。可点击下方按钮添加。</p>
+                <p className="border-t border-slate-100 px-4 py-3 text-center text-xs leading-5 text-slate-400">{mapMode === "route" ? "这一天还没有安排。可点击下方按钮添加。" : "还没有已安排的行程。可点击下方按钮添加。"}</p>
               )}
               <div className="flex justify-center border-t border-slate-100 px-3 py-3">
                 <button type="button" className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition hover:bg-blue-100 hover:ring-blue-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={addItineraryFromMap} aria-label="从旅行地图添加行程" title="添加行程">
