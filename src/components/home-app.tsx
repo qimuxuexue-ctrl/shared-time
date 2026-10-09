@@ -24,7 +24,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Modal } from "@/components/modal";
 import { DatePicker } from "@/components/date-picker";
 import { DeleteEventModal } from "@/components/delete-event-modal";
-import { LoadingScreen } from "@/components/loading-screen";
+import { LoadingRecoveryScreen, LoadingScreen } from "@/components/loading-screen";
 import { UsageGuide } from "@/components/usage-guide";
 import {
   clearStoredIdentity,
@@ -36,6 +36,7 @@ import {
   getDateStringInTimeZone,
   getEventTimeZoneLabel,
 } from "@/lib/dates";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { HABIT_DURATION_OPTIONS, HABIT_FREQUENCIES, type HabitDurationMinutes, type HabitFrequency } from "@/lib/habits";
 import type {
   EventSummary,
@@ -94,7 +95,7 @@ export function HomeApp() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [notifications, setNotifications] = useState<HomeNotification[]>([]);
-  const [status, setStatus] = useState<"checking" | "signed-out" | "ready">(
+  const [status, setStatus] = useState<"checking" | "signed-out" | "ready" | "load-error">(
     "checking",
   );
   const [idInput, setIdInput] = useState("");
@@ -109,12 +110,12 @@ export function HomeApp() {
   >(new Set());
   const [notificationError, setNotificationError] = useState("");
 
-  const signIn = useCallback(async (displayId: string) => {
+  const signIn = useCallback(async (displayId: string, restoring = false) => {
     setError("");
     setSubmitting(true);
 
     try {
-      const response = await fetch("/api/identity", {
+      const response = await fetchWithTimeout("/api/identity", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: displayId }),
@@ -127,7 +128,7 @@ export function HomeApp() {
       setStatus("ready");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "无法识别这个 ID");
-      setStatus("signed-out");
+      setStatus(restoring ? "load-error" : "signed-out");
     } finally {
       setSubmitting(false);
     }
@@ -135,7 +136,7 @@ export function HomeApp() {
 
   const refreshEvents = useCallback(async (activeIdentity: Identity) => {
     try {
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `/api/events?identityId=${encodeURIComponent(activeIdentity.id)}`,
       );
       const payload = await readJson<{
@@ -163,7 +164,7 @@ export function HomeApp() {
       }
 
       setIdInput(stored.displayId);
-      void signIn(stored.displayId);
+      void signIn(stored.displayId, true);
     });
 
     return () => {
@@ -246,6 +247,24 @@ export function HomeApp() {
 
   if (status === "checking") {
     return <LoadingScreen />;
+  }
+
+  if (status === "load-error") {
+    return <LoadingRecoveryScreen
+      onRetry={() => {
+        setStatus("checking");
+        void signIn(idInput, true);
+      }}
+      secondaryLabel="重新输入 ID"
+      onSecondary={() => {
+        clearStoredIdentity();
+        setIdentity(null);
+        setEvents([]);
+        setNotifications([]);
+        setError("");
+        setStatus("signed-out");
+      }}
+    />;
   }
 
   if (status === "signed-out" || !identity) {

@@ -32,12 +32,13 @@ import {
 
 import { DeleteEventModal } from "@/components/delete-event-modal";
 import { EventPresence } from "@/components/event-presence";
-import { LoadingScreen } from "@/components/loading-screen";
+import { LoadingRecoveryScreen, LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
 import { WeekPicker } from "@/components/week-picker";
 import { TravelPlanWorkspace } from "@/components/travel-plan-workspace";
 import { HabitTrackerWorkspace } from "@/components/habit-tracker-workspace";
 import { readStoredIdentity, storeIdentity } from "@/lib/browser-identity";
+import { fetchWithTimeout, isRetryableLoadError } from "@/lib/fetch-with-timeout";
 import {
   addDaysToDateString,
   EVENT_TIME_ZONE_OPTIONS,
@@ -416,6 +417,7 @@ export function EventWorkspace({ code }: { code: string }) {
     getMondayDateString(getBeijingDateString()),
   );
   const [loading, setLoading] = useState(true);
+  const [loadCanRetry, setLoadCanRetry] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingEventName, setEditingEventName] = useState(false);
   const [eventNameSaving, setEventNameSaving] = useState(false);
@@ -474,7 +476,7 @@ export function EventWorkspace({ code }: { code: string }) {
       try {
         const query = new URLSearchParams({ identityId: activeIdentity.id });
         if (requestedWeek) query.set("weekStart", requestedWeek);
-        const response = await fetch(`/api/events/${code}?${query}`);
+        const response = await fetchWithTimeout(`/api/events/${code}?${query}`);
         const payload = (await response.json()) as EventWorkspaceData & {
           error?: string;
         };
@@ -518,9 +520,11 @@ export function EventWorkspace({ code }: { code: string }) {
           setWeekStart(payload.weekStart);
         }
         setError("");
+        setLoadCanRetry(false);
       } catch (caught) {
         if (!silent && currentRequest === workspaceRequestIdRef.current) {
           setError(caught instanceof Error ? caught.message : "无法读取事件");
+          setLoadCanRetry(isRetryableLoadError(caught));
         }
       } finally {
         if (showPageLoader && currentRequest === workspaceRequestIdRef.current) {
@@ -557,15 +561,28 @@ export function EventWorkspace({ code }: { code: string }) {
     const initialLoad = window.setTimeout(() => {
       void loadWorkspace(identity, requestedWeek);
     }, 0);
-    const timer = window.setInterval(() => {
-      void loadWorkspace(identity, requestedWeek, true);
-    }, 5000);
 
     return () => {
       window.clearTimeout(initialLoad);
-      window.clearInterval(timer);
     };
   }, [identity, loadWorkspace, weekStart]);
+
+  useEffect(() => {
+    if (!identity || !data) return;
+    let active = true;
+    let pollTimer: number | null = null;
+
+    const poll = async () => {
+      await loadWorkspace(identity, weekStart, true);
+      if (active) pollTimer = window.setTimeout(() => void poll(), 5000);
+    };
+
+    pollTimer = window.setTimeout(() => void poll(), 5000);
+    return () => {
+      active = false;
+      if (pollTimer !== null) window.clearTimeout(pollTimer);
+    };
+  }, [data, identity, loadWorkspace, weekStart]);
 
   useEffect(
     () => () => {
@@ -1375,6 +1392,17 @@ export function EventWorkspace({ code }: { code: string }) {
   }
 
   if (!data) {
+    if (loadCanRetry && identity) {
+      return <LoadingRecoveryScreen
+        onRetry={() => {
+          setLoading(true);
+          setLoadCanRetry(false);
+          void loadWorkspace(identity, initialWeekResolvedRef.current ? weekStart : undefined);
+        }}
+        secondaryLabel="先回首页"
+        secondaryHref="/"
+      />;
+    }
     return <WorkspaceMessage title="无法打开事件" body={error || "请确认邀请码是否正确。"} />;
   }
 
