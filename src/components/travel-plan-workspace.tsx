@@ -13,6 +13,7 @@ import {
   LockSimpleIcon,
   MapPinIcon,
   NavigationArrowIcon,
+  PushPinIcon,
   PencilSimpleIcon,
   PlusIcon,
   QuestionMarkIcon,
@@ -39,6 +40,7 @@ import { TravelPlanGuide } from "@/components/travel-plan-guide";
 import { TravelRouteMap } from "@/components/travel-route-map";
 import { TravelStayModal } from "@/components/travel-stay-modal";
 import { TravelTransportModal } from "@/components/travel-transport-modal";
+import { TravelWishModal } from "@/components/travel-wish-modal";
 import {
   addDaysToDateString,
   EVENT_TIME_ZONE_OPTIONS,
@@ -52,6 +54,7 @@ import type {
   TravelItineraryItem,
   TravelJourney,
   TravelStay,
+  TravelWish,
 } from "@/lib/types";
 
 const HOURS = Array.from({ length: 14 }, (_, index) => index + 10);
@@ -158,6 +161,7 @@ export function TravelPlanWorkspace({
   onTimeZoneChange,
   onTravelDatesChange,
   onItineraryChange,
+  onWishesChange,
   onStaysChange,
   onJourneysChange,
 }: {
@@ -176,6 +180,7 @@ export function TravelPlanWorkspace({
   onTimeZoneChange: (timeZone: EventTimeZone) => void;
   onTravelDatesChange: (startDate: string, endDate: string) => Promise<void>;
   onItineraryChange: (items: TravelItineraryItem[]) => void;
+  onWishesChange: (wishes: TravelWish[]) => void;
   onStaysChange: (stays: TravelStay[]) => void;
   onJourneysChange: (journeys: TravelJourney[]) => void;
 }) {
@@ -188,6 +193,7 @@ export function TravelPlanWorkspace({
   const [draft, setDraft] = useState<TravelItineraryItem | { date: string; startHour: number } | { date: null; startHour: null } | null>(null);
   const [transportItemId, setTransportItemId] = useState<string | null>(null);
   const [stayDraft, setStayDraft] = useState<TravelStay | "new" | null>(null);
+  const [wishDraft, setWishDraft] = useState<TravelWish | "new" | null>(null);
   const [journeyDirection, setJourneyDirection] = useState<"outbound" | "return" | null>(null);
   const [editingDates, setEditingDates] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -491,6 +497,36 @@ export function TravelPlanWorkspace({
             </section>
 
             <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><PushPinIcon size={17} weight="bold" />愿望清单</h2>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">先把想实现的事贴在这里，不急着决定地点和时间。</p>
+                </div>
+                <button type="button" className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-600 ring-1 ring-amber-100 transition hover:bg-amber-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300" onClick={() => setWishDraft("new")} aria-label="添加愿望"><PlusIcon size={17} weight="bold" /></button>
+              </div>
+              {data.wishes.length ? <div className="mt-3 space-y-2.5">
+                {data.wishes.map((wish) => {
+                  const cardClass = `relative w-full overflow-hidden rounded-xl border border-amber-100 bg-[#fffbed] px-3 py-3 text-left shadow-[0_5px_16px_rgba(120,101,45,0.07)] ${wish.isCurrent ? "transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-[0_8px_20px_rgba(120,101,45,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300" : ""}`;
+                  const cardContent = <>
+                    <span className="absolute right-0 top-0 size-5 rounded-bl-lg bg-white/70" aria-hidden="true" />
+                    <span className="block whitespace-pre-wrap break-words pr-3 text-sm leading-6 text-slate-700">{wish.content}</span>
+                    <span className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: wish.authorTagColor }} />
+                      <span className="min-w-0 truncate">{wish.authorTagName}</span>
+                      {wish.isCurrent ? <><span className="ml-auto text-amber-600">你</span><PencilSimpleIcon size={12} weight="bold" /></> : null}
+                    </span>
+                  </>;
+                  return wish.isCurrent
+                    ? <button key={wish.id} type="button" className={cardClass} onClick={() => setWishDraft(wish)} aria-label={`编辑愿望：${wish.content}`}>{cardContent}</button>
+                    : <article key={wish.id} className={cardClass}>{cardContent}</article>;
+                })}
+              </div> : <button type="button" className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-dashed border-amber-200 bg-[#fffdf5] px-3 py-3 text-left transition hover:bg-amber-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300" onClick={() => setWishDraft("new")}>
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-amber-600 ring-1 ring-amber-100"><PlusIcon size={15} weight="bold" /></span>
+                <span><span className="block text-xs font-semibold text-slate-600">贴上第一个愿望</span><span className="mt-0.5 block text-[11px] text-slate-400">一句话也可以，之后随时回来补充</span></span>
+              </button>}
+            </section>
+
+            <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-slate-800">未定行程</h2><p className="mt-1 text-xs text-slate-400">先记下想去的地方，之后再安排时间。</p></div><button type="button" className="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition hover:bg-blue-100 active:scale-95" onClick={() => setDraft({ date: null, startHour: null })} aria-label="添加未定行程"><PlusIcon size={17} weight="bold" /></button></div>
               {unscheduledItems.length ? <div className="mt-3 space-y-2">{unscheduledItems.map((item) => <button key={item.id} type="button" className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/60" onClick={() => setDraft(item)}><span className="block break-words text-sm font-semibold text-slate-700">{item.title}</span>{item.note ? <span className="mt-1 line-clamp-2 block whitespace-pre-wrap break-words text-xs leading-5 text-slate-400">{item.note}</span> : null}{item.placeName ? <span className="mt-1.5 flex items-center gap-1 text-xs text-blue-500"><MapPinIcon size={12} weight="bold" />{item.placeName}</span> : null}</button>)}</div> : <button type="button" className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-3 text-left text-xs font-medium text-slate-400 transition hover:border-blue-200 hover:bg-blue-50/60 hover:text-blue-600" onClick={() => setDraft({ date: null, startHour: null })}><span className="grid size-7 place-items-center rounded-full bg-white ring-1 ring-slate-200"><PlusIcon size={14} weight="bold" /></span>添加第一项未定行程</button>}
             </section>
@@ -763,6 +799,15 @@ export function TravelPlanWorkspace({
         onClose={() => setStayDraft(null)}
         onSaved={(stay) => { onStaysChange([...data.stays.filter((item) => item.id !== stay.id), stay].sort((a, b) => a.checkInDate.localeCompare(b.checkInDate))); setStayDraft(null); }}
         onDeleted={(id) => { onStaysChange(data.stays.filter((item) => item.id !== id)); setStayDraft(null); }}
+      /> : null}
+
+      {wishDraft ? <TravelWishModal
+        code={data.event.shareCode}
+        identityId={identityId}
+        wish={wishDraft === "new" ? undefined : wishDraft}
+        onClose={() => setWishDraft(null)}
+        onSaved={(wish) => { onWishesChange([...data.wishes.filter((item) => item.id !== wish.id), wish].sort((a, b) => a.createdAt.localeCompare(b.createdAt))); setWishDraft(null); }}
+        onDeleted={(id) => { onWishesChange(data.wishes.filter((item) => item.id !== id)); setWishDraft(null); }}
       /> : null}
 
       {journeyDirection ? <TravelJourneyModal

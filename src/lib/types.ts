@@ -115,6 +115,17 @@ export type TravelItineraryItem = {
   createdAt: string;
 };
 
+export type TravelWish = {
+  id: string;
+  memberId: string;
+  authorTagName: string;
+  authorTagColor: string;
+  content: string;
+  isCurrent: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TravelStay = {
   id: string;
   name: string;
@@ -162,6 +173,7 @@ export type EventWorkspaceData = {
   weekStart: string;
   members: EventMember[];
   notes: EventNote[];
+  wishes: TravelWish[];
   itinerary: TravelItineraryItem[];
   stays: TravelStay[];
   journeys: TravelJourney[];

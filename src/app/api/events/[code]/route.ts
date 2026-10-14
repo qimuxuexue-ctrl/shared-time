@@ -131,6 +131,7 @@ export async function GET(
     { data: slots, error: slotsError },
     { data: notes, error: notesError },
     { data: finalPeriods },
+    { data: wishes, error: wishesError },
     { data: itinerary, error: itineraryError },
     { data: stays, error: staysError },
     { data: journeys, error: journeysError },
@@ -159,6 +160,11 @@ export async function GET(
         .order("slot_date", { ascending: true })
         .order("start_hour", { ascending: true }),
       supabaseAdmin
+        .from("travel_wishes")
+        .select("id, member_id, content, created_at, updated_at")
+        .eq("event_id", event.id)
+        .order("created_at", { ascending: true }),
+      supabaseAdmin
         .from("travel_itinerary_items")
         .select("id, member_id, trip_date, start_hour, end_hour, title, note, place_name, address, latitude, longitude, transport_mode, transport_duration_minutes, transport_note, created_at")
         .eq("event_id", event.id)
@@ -176,7 +182,8 @@ export async function GET(
         .order("journey_date", { ascending: true }),
     ]);
 
-  if (membersError || slotsError || notesError || itineraryError || staysError || journeysError) {
+  const wishesTableMissing = wishesError?.code === "42P01" || wishesError?.code === "PGRST205";
+  if (membersError || slotsError || notesError || (wishesError && !wishesTableMissing) || itineraryError || staysError || journeysError) {
     return serverError();
   }
 
@@ -250,6 +257,21 @@ export async function GET(
               updatedAt: note.updated_at,
             },
           ]
+        : [];
+    }),
+    wishes: (wishes ?? []).flatMap((wish) => {
+      const author = membersById.get(wish.member_id);
+      return author
+        ? [{
+            id: wish.id,
+            memberId: wish.member_id,
+            authorTagName: author.tag_name,
+            authorTagColor: author.tag_color,
+            content: wish.content,
+            isCurrent: wish.member_id === currentMember.id,
+            createdAt: wish.created_at,
+            updatedAt: wish.updated_at,
+          }]
         : [];
     }),
     itinerary: (itinerary ?? []).flatMap((item) => {

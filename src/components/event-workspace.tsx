@@ -1445,6 +1445,14 @@ export function EventWorkspace({ code }: { code: string }) {
               return next;
             });
           }}
+          onWishesChange={(wishes) => {
+            setData((current) => {
+              if (!current) return current;
+              const next = { ...current, wishes };
+              dataRef.current = next;
+              return next;
+            });
+          }}
           onStaysChange={(stays) => {
             setData((current) => {
               if (!current) return current;
