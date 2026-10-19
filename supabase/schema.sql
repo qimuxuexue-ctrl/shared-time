@@ -184,11 +184,18 @@ create table if not exists public.habits (
   frequency text not null,
   target_count smallint not null,
   duration_minutes smallint,
+  active_from date,
+  active_until date,
   created_at timestamptz not null default now(),
   constraint habits_title_length check (char_length(title) between 1 and 60),
   constraint habits_frequency_values check (frequency in ('daily', 'weekly', 'half_monthly', 'monthly')),
   constraint habits_target_count_range check (target_count between 1 and 31),
-  constraint habits_duration_minutes_values check (duration_minutes is null or duration_minutes in (10, 20, 30, 60, 90, 120, 150))
+  constraint habits_duration_minutes_values check (duration_minutes is null or duration_minutes in (10, 20, 30, 60, 90, 120, 150)),
+  constraint habits_active_range check (
+    (active_from is null and active_until is null)
+    or
+    (active_from is not null and active_until is not null and active_from <= active_until)
+  )
 );
 create index if not exists habits_event_id_idx on public.habits(event_id, created_at);
 alter table public.habits enable row level security;

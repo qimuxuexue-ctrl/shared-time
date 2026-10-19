@@ -129,19 +129,26 @@ export async function POST(request: Request) {
 
     if (workspaceKind === "habit_tracker" && parsed.data.habits?.length) {
       const createdAt = Date.now();
-      const { error: habitsError } = await supabaseAdmin.from("habits").insert(
-        parsed.data.habits.map((habit, index) => ({
+      const habitRows = parsed.data.habits.map((habit, index) => ({
           event_id: event.id,
           title: habit.title,
           frequency: habit.frequency,
           target_count: habit.targetCount,
           duration_minutes: habit.durationMinutes,
           created_at: new Date(createdAt + index).toISOString(),
-        })),
-      );
-      if (habitsError) {
-        await supabaseAdmin.from("events").delete().eq("id", event.id);
-        return serverError("保存习惯清单失败，请稍后重试");
+          ...(habit.activeFrom ? { active_from: habit.activeFrom, active_until: habit.activeUntil } : {}),
+      }));
+      const habitGroups = [
+        habitRows.filter((habit) => !("active_from" in habit)),
+        habitRows.filter((habit) => "active_from" in habit),
+      ];
+      for (const group of habitGroups) {
+        if (!group.length) continue;
+        const { error: habitsError } = await supabaseAdmin.from("habits").insert(group);
+        if (habitsError) {
+          await supabaseAdmin.from("events").delete().eq("id", event.id);
+          return serverError("保存习惯清单失败，请稍后重试");
+        }
       }
     }
 

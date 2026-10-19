@@ -34,8 +34,28 @@ function invalidContext(context: Awaited<ReturnType<typeof getContext>>) {
   return null;
 }
 
-function mapHabit(row: { id: string; title: string; frequency: string; target_count: number; duration_minutes: number | null; created_at: string }) {
-  return { id: row.id, title: row.title, frequency: row.frequency, targetCount: row.target_count, durationMinutes: row.duration_minutes, createdAt: row.created_at };
+type HabitRow = {
+  id: string;
+  title: string;
+  frequency: string;
+  target_count: number;
+  duration_minutes: number | null;
+  active_from?: string | null;
+  active_until?: string | null;
+  created_at: string;
+};
+
+function mapHabit(row: HabitRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    frequency: row.frequency,
+    targetCount: row.target_count,
+    durationMinutes: row.duration_minutes,
+    activeFrom: row.active_from ?? null,
+    activeUntil: row.active_until ?? null,
+    createdAt: row.created_at,
+  };
 }
 
 function periodRange(date: string, frequency: string) {
@@ -63,7 +83,7 @@ export async function GET(request: Request, route: RouteContext<"/api/events/[co
   if (invalid || !context) return invalid!;
 
   const { data: rows, error: habitError } = await supabaseAdmin.from("habits")
-    .select("id, title, frequency, target_count, duration_minutes, created_at")
+    .select("*")
     .eq("event_id", context.event.id).order("created_at", { ascending: true });
   if (habitError) return serverError("读取习惯失败");
   const habits = (rows ?? []).map(mapHabit);
@@ -87,9 +107,13 @@ export async function POST(request: Request, route: RouteContext<"/api/events/[c
   const context = await getContext(code.toUpperCase(), parsed.data.identityId);
   const invalid = invalidContext(context);
   if (invalid || !context) return invalid!;
+  const activeRange = parsed.data.activeFrom ? {
+    active_from: parsed.data.activeFrom,
+    active_until: parsed.data.activeUntil,
+  } : {};
   const { data, error } = await supabaseAdmin.from("habits")
-    .insert({ event_id: context.event.id, title: parsed.data.title, frequency: parsed.data.frequency, target_count: parsed.data.targetCount, duration_minutes: parsed.data.durationMinutes })
-    .select("id, title, frequency, target_count, duration_minutes, created_at").single();
+    .insert({ event_id: context.event.id, title: parsed.data.title, frequency: parsed.data.frequency, target_count: parsed.data.targetCount, duration_minutes: parsed.data.durationMinutes, ...activeRange })
+    .select("*").single();
   if (error || !data) return serverError("保存习惯失败");
   return Response.json({ habit: mapHabit(data) }, { status: 201 });
 }
@@ -101,10 +125,14 @@ export async function PUT(request: Request, route: RouteContext<"/api/events/[co
   const context = await getContext(code.toUpperCase(), parsed.data.identityId);
   const invalid = invalidContext(context);
   if (invalid || !context) return invalid!;
+  const activeRange = parsed.data.activeFrom ? {
+    active_from: parsed.data.activeFrom,
+    active_until: parsed.data.activeUntil,
+  } : {};
   const { data, error } = await supabaseAdmin.from("habits")
-    .update({ title: parsed.data.title, frequency: parsed.data.frequency, target_count: parsed.data.targetCount, duration_minutes: parsed.data.durationMinutes })
+    .update({ title: parsed.data.title, frequency: parsed.data.frequency, target_count: parsed.data.targetCount, duration_minutes: parsed.data.durationMinutes, ...activeRange })
     .eq("id", parsed.data.habitId).eq("event_id", context.event.id)
-    .select("id, title, frequency, target_count, duration_minutes, created_at").maybeSingle();
+    .select("*").maybeSingle();
   if (error) return serverError("更新习惯失败");
   if (!data) return Response.json({ error: "找不到这个习惯" }, { status: 404 });
   return Response.json({ habit: mapHabit(data) });
@@ -132,7 +160,7 @@ export async function PATCH(request: Request, route: RouteContext<"/api/events/[
   const invalid = invalidContext(context);
   if (invalid || !context) return invalid!;
   const { data: habit, error: habitError } = await supabaseAdmin.from("habits")
-    .select("id, frequency, target_count, duration_minutes").eq("id", parsed.data.habitId)
+    .select("*").eq("id", parsed.data.habitId)
     .eq("event_id", context.event.id).maybeSingle();
   if (habitError) return serverError("读取习惯失败");
   if (!habit) return Response.json({ error: "找不到这个习惯" }, { status: 404 });
@@ -154,6 +182,9 @@ export async function PATCH(request: Request, route: RouteContext<"/api/events/[
     if (error) return serverError("撤销打卡失败");
   } else {
     if (!existing) {
+      if ((habit.active_from && parsed.data.date < habit.active_from) || (habit.active_until && parsed.data.date > habit.active_until)) {
+        return Response.json({ error: "这一天不在短期习惯的执行日期内" }, { status: 400 });
+      }
       const [periodStart, periodEnd] = periodRange(parsed.data.date, habit.frequency);
       const { data: periodRows, error: periodError } = await supabaseAdmin.from("habit_checkins")
         .select("count").eq("habit_id", habit.id).eq("member_id", context.member.id)

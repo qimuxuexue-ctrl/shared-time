@@ -32,6 +32,7 @@ import {
   storeIdentity,
 } from "@/lib/browser-identity";
 import {
+  addDaysToDateString,
   EVENT_TIME_ZONE_OPTIONS,
   getDateStringInTimeZone,
   getEventTimeZoneLabel,
@@ -665,9 +666,20 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
   const today = getDateStringInTimeZone(timeZone);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
-  const [habits, setHabits] = useState<{ id: number; title: string; frequency: HabitFrequency; targetCount: number; durationMinutes: HabitDurationMinutes | null }[]>([]);
+  const [habits, setHabits] = useState<{ id: number; title: string; frequency: HabitFrequency; targetCount: number; durationMinutes: HabitDurationMinutes | null; activeFrom: string | null; activeUntil: string | null }[]>([]);
   const updateHabit = (id: number, update: Partial<(typeof habits)[number]>) => {
     setHabits((items) => items.map((habit) => habit.id === id ? { ...habit, ...update } : habit));
+  };
+  const addHabit = (shortTerm: boolean) => {
+    setHabits((items) => [...items, {
+      id: items.reduce((highest, item) => Math.max(highest, item.id), -1) + 1,
+      title: "",
+      frequency: "daily",
+      targetCount: 1,
+      durationMinutes: null,
+      activeFrom: shortTerm ? today : null,
+      activeUntil: shortTerm ? addDaysToDateString(today, 6) : null,
+    }]);
   };
 
   const submit = async (formEvent: FormEvent<HTMLFormElement>) => {
@@ -688,7 +700,7 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
           endDate: workspaceKind === "travel_plan" ? endDate : undefined,
           habits: workspaceKind === "habit_tracker" ? habits
             .filter((habit) => habit.title.trim())
-            .map(({ title, frequency, targetCount, durationMinutes }) => ({ title: title.trim(), frequency, targetCount, durationMinutes })) : undefined,
+            .map(({ title, frequency, targetCount, durationMinutes, activeFrom, activeUntil }) => ({ title: title.trim(), frequency, targetCount, durationMinutes, activeFrom, activeUntil })) : undefined,
           timeZone,
         }),
       });
@@ -785,10 +797,11 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
             <div className="space-y-2">
               {habits.map((habit, index) => {
                 const max = HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.max ?? 1;
+                const shortTerm = Boolean(habit.activeFrom && habit.activeUntil);
                 return (
                   <div key={habit.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-slate-600">习惯 {index + 1}</span>
+                      <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">{shortTerm ? <><CalendarBlankIcon size={13} weight="bold" className="text-blue-500" />短期习惯</> : `习惯 ${index + 1}`}</span>
                       <button type="button" className="rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setHabits((items) => items.filter((item) => item.id !== habit.id))} aria-label={`移除习惯 ${index + 1}`}><TrashIcon size={15} weight="bold" /></button>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(80px,0.55fr)_minmax(100px,0.75fr)]">
@@ -804,11 +817,17 @@ function CreateEventModal({ identity, onClose, onCreated }: { identity: Identity
                         {HABIT_DURATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </div>
+                    {shortTerm ? <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200/80 pt-3">
+                      <div><span className="block text-xs font-medium text-slate-500">开始日期</span><DatePicker value={habit.activeFrom!} min={today} ariaLabel={`短期习惯 ${index + 1} 开始日期`} onChange={(value) => updateHabit(habit.id, { activeFrom: value, activeUntil: habit.activeUntil! < value ? value : habit.activeUntil })} /></div>
+                      <div><span className="block text-xs font-medium text-slate-500">结束日期</span><DatePicker value={habit.activeUntil!} min={habit.activeFrom!} align="right" ariaLabel={`短期习惯 ${index + 1} 结束日期`} onChange={(value) => updateHabit(habit.id, { activeUntil: value })} /></div>
+                      <p className="col-span-2 text-xs leading-5 text-slate-400">结束后会从习惯清单隐藏，已经完成的打卡仍保留。</p>
+                    </div> : null}
                   </div>
                 );
               })}
             </div>
-            <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-left text-blue-700 transition hover:border-blue-200 hover:bg-blue-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:opacity-50" disabled={habits.length >= 20} onClick={() => setHabits((items) => [...items, { id: items.reduce((highest, item) => Math.max(highest, item.id), -1) + 1, title: "", frequency: "daily", targetCount: 1, durationMinutes: null }])}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-blue-100"><PlusIcon size={16} weight="bold" /></span><span><span className="block text-sm font-semibold">添加习惯</span><span className="mt-0.5 block text-xs font-normal text-blue-500">{habits.length ? "还可以继续添加下一项" : "例如背单词、运动或早睡"}</span></span></button>
+            <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-left text-blue-700 transition hover:border-blue-200 hover:bg-blue-100/70 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:opacity-50" disabled={habits.length >= 20} onClick={() => addHabit(false)}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-white shadow-sm ring-1 ring-blue-100"><PlusIcon size={16} weight="bold" /></span><span><span className="block text-sm font-semibold">添加习惯</span><span className="mt-0.5 block text-xs font-normal text-blue-500">{habits.length ? "还可以继续添加下一项" : "例如背单词、运动或早睡"}</span></span></button>
+            <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/60 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:opacity-50" disabled={habits.length >= 20} onClick={() => addHabit(true)}><span className="grid size-8 shrink-0 place-items-center rounded-full bg-slate-50 text-blue-600 ring-1 ring-slate-200"><CalendarBlankIcon size={16} weight="bold" /></span><span><span className="block text-sm font-semibold">添加短期习惯</span><span className="mt-0.5 block text-xs font-normal text-slate-400">设置开始与结束日期，到期自动收起</span></span></button>
           </fieldset>
         )}
         <div>

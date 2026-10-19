@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ArrowLeftIcon, CaretLeftIcon, CaretRightIcon,
+  ArrowLeftIcon, CalendarBlankIcon, CaretLeftIcon, CaretRightIcon,
   CheckIcon, ClockIcon, CopyIcon, HashIcon, PencilSimpleIcon,
   PlusIcon, SignOutIcon, TrashIcon, UsersThreeIcon,
 } from "@phosphor-icons/react";
@@ -12,6 +12,7 @@ import {
   CALENDAR_HOUR_END, CALENDAR_HOUR_HEIGHT, CALENDAR_HOUR_START,
   DurationCalendarBlock,
 } from "@/components/duration-calendar-block";
+import { DatePicker } from "@/components/date-picker";
 import { EventPresence } from "@/components/event-presence";
 import { Modal } from "@/components/modal";
 import { WeekPicker } from "@/components/week-picker";
@@ -28,6 +29,8 @@ type Habit = {
   frequency: HabitFrequency;
   targetCount: number;
   durationMinutes: HabitDurationMinutes | null;
+  activeFrom: string | null;
+  activeUntil: string | null;
   createdAt: string;
 };
 type Checkin = { id: string; habitId: string; date: string; startHour: number | null; count: number };
@@ -65,6 +68,10 @@ function formatTimeRange(startHour: number, durationMinutes: number | null) {
   return `${String(startHour).padStart(2, "0")}:00–${end}`;
 }
 
+function isHabitVisible(habit: Habit, today: string) {
+  return habit.activeUntil === null || habit.activeUntil >= today;
+}
+
 export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving, onCopy, onDelete, onLeave, onEditName, onEditTag, onTimeZoneChange }: {
   data: EventWorkspaceData;
   identityId: string;
@@ -83,12 +90,13 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   const [habits, setHabits] = useState<Habit[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [activeHabitId, setActiveHabitId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Habit | "new" | null>(null);
+  const [draft, setDraft] = useState<Habit | "new" | "short-term" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const requestId = useRef(0);
-  const activeHabit = habits.find((habit) => habit.id === activeHabitId) ?? null;
+  const visibleHabits = useMemo(() => habits.filter((habit) => isHabitVisible(habit, today)), [habits, today]);
+  const activeHabit = visibleHabits.find((habit) => habit.id === activeHabitId) ?? null;
 
   useEffect(() => {
     const currentRequest = ++requestId.current;
@@ -100,7 +108,8 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
         if (currentRequest !== requestId.current) return;
         setHabits(payload.habits);
         setCheckins(payload.checkins);
-        setActiveHabitId((current) => payload.habits!.some((habit) => habit.id === current) ? current : payload.habits![0]?.id ?? null);
+        const visible = payload.habits.filter((habit) => isHabitVisible(habit, today));
+        setActiveHabitId((current) => visible.some((habit) => habit.id === current) ? current : visible[0]?.id ?? null);
         setError("");
       })
       .catch((caught: unknown) => {
@@ -110,7 +119,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
         if (currentRequest === requestId.current) setLoading(false);
       });
     return () => { requestId.current += 1; };
-  }, [data.event.shareCode, identityId, weekStart]);
+  }, [data.event.shareCode, identityId, today, weekStart]);
 
   const periodProgress = (habit: Habit, date = dates.includes(today) ? today : weekStart) => {
     const [start, end] = periodRange(date, habit.frequency);
@@ -121,6 +130,10 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   const toggleCheckin = async (habit: Habit, date: string, startHour: number) => {
     if (savingKey) return;
     const existing = checkins.find((item) => item.habitId === habit.id && item.date === date && item.startHour === startHour);
+    if (!existing && ((habit.activeFrom && date < habit.activeFrom) || (habit.activeUntil && date > habit.activeUntil))) {
+      setError(`「${habit.title}」只能在 ${formatShortDate(habit.activeFrom!)}–${formatShortDate(habit.activeUntil!)} 期间打卡`);
+      return;
+    }
     if (!existing && periodProgress(habit, date) >= habit.targetCount) {
       setError(`「${habit.title}」这个周期已完成 ${habit.targetCount} 次`);
       return;
@@ -170,11 +183,13 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
         <aside className="space-y-4 lg:sticky lg:top-5">
           <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
             <div className="flex items-center justify-between gap-2"><div><h2 className="text-sm font-semibold text-slate-800">习惯清单</h2><p className="mt-1 text-xs text-slate-400">先选习惯，再点右侧时间</p></div><button type="button" className="icon-button" onClick={() => setDraft("new")} aria-label="新增习惯"><PlusIcon size={18} weight="bold" /></button></div>
-            {habits.length ? <div className="mt-4 space-y-2">{habits.map((habit, index) => {
+            {visibleHabits.length ? <div className="mt-4 space-y-2">{visibleHabits.map((habit) => {
+              const index = habits.findIndex((item) => item.id === habit.id);
               const selected = habit.id === activeHabitId;
               const durationLabel = HABIT_DURATION_OPTIONS.find((option) => option.value === habit.durationMinutes)?.label;
-              return <div key={habit.id} className={`flex items-center gap-1 rounded-xl border p-1 transition ${selected ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-slate-50"}`}><button type="button" className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left" onClick={() => setActiveHabitId(habit.id)} aria-pressed={selected}><span className={`size-2.5 shrink-0 rounded-full ${HABIT_COLORS[index % HABIT_COLORS.length].dot}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{habit.title}</span><span className="text-xs text-slate-500">{HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.label} {habit.targetCount} 次{durationLabel ? ` · ${durationLabel}` : ""}</span></span><span className="text-xs font-semibold tabular-nums text-blue-600">{Math.min(periodProgress(habit), habit.targetCount)}/{habit.targetCount}</span></button><button type="button" className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-white hover:text-blue-500" onClick={() => setDraft(habit)} aria-label={`编辑${habit.title}`}><PencilSimpleIcon size={13} weight="bold" /></button></div>;
-            })}</div> : <button type="button" className="mt-4 flex w-full items-center gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 px-3 py-4 text-left text-sm font-medium text-blue-700" onClick={() => setDraft("new")}><PlusIcon size={16} weight="bold" />添加第一个习惯</button>}
+              return <div key={habit.id} className={`flex items-center gap-1 rounded-xl border p-1 transition ${selected ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-slate-50"}`}><button type="button" className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left" onClick={() => setActiveHabitId(habit.id)} aria-pressed={selected}><span className={`size-2.5 shrink-0 rounded-full ${HABIT_COLORS[index % HABIT_COLORS.length].dot}`} /><span className="min-w-0 flex-1"><span className="flex items-center gap-1 truncate text-sm font-semibold text-slate-800">{habit.activeUntil ? <CalendarBlankIcon size={12} weight="bold" className="shrink-0 text-blue-500" /> : null}<span className="truncate">{habit.title}</span></span><span className="block text-xs text-slate-500">{HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.label} {habit.targetCount} 次{durationLabel ? ` · ${durationLabel}` : ""}</span>{habit.activeFrom && habit.activeUntil ? <span className="mt-0.5 block text-[11px] tabular-nums text-blue-500">{formatShortDate(habit.activeFrom)}–{formatShortDate(habit.activeUntil)}</span> : null}</span><span className="text-xs font-semibold tabular-nums text-blue-600">{Math.min(periodProgress(habit), habit.targetCount)}/{habit.targetCount}</span></button><button type="button" className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-white hover:text-blue-500" onClick={() => setDraft(habit)} aria-label={`编辑${habit.title}`}><PencilSimpleIcon size={13} weight="bold" /></button></div>;
+            })}</div> : habits.length ? <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3 text-xs leading-5 text-slate-500">短期习惯已经结束，之前的打卡仍保留在日历中。</div> : <button type="button" className="mt-4 flex w-full items-center gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 px-3 py-4 text-left text-sm font-medium text-blue-700 transition hover:bg-blue-50 active:scale-[0.99]" onClick={() => setDraft("new")}><PlusIcon size={16} weight="bold" />添加第一个习惯</button>}
+            <button type="button" className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-blue-200 hover:bg-blue-50/60 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setDraft("short-term")}><span className="grid size-7 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-600"><CalendarBlankIcon size={14} weight="bold" /></span><span><span className="block text-xs font-semibold text-slate-700">添加短期习惯</span><span className="mt-0.5 block text-[11px] text-slate-400">到期后自动从清单收起</span></span></button>
             <p className="mt-4 text-xs leading-5 text-slate-400">习惯清单由成员共用；每个人只记录和查看自己的打卡时间。</p>
           </section>
           <section className="rounded-[18px] border border-slate-200/80 bg-white p-4"><div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UsersThreeIcon size={18} weight="bold" />参与者</h2><span className="text-sm text-slate-400">{data.members.length}</span></div><div className="space-y-2">{data.members.map((member) => member.isCurrent ? <button key={member.id} type="button" className="group flex w-full min-w-0 items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-left transition hover:bg-slate-100" onClick={onEditTag}><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: member.tagColor }} /><span className="min-w-0 truncate text-sm font-semibold text-slate-700">{member.tagName}</span><span className="ml-auto text-xs font-medium text-blue-600">你</span><PencilSimpleIcon size={13} weight="bold" className="text-slate-300 group-hover:text-blue-500" /></button> : <div key={member.id} className="flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: member.tagColor }} /><span className="truncate text-sm font-semibold text-slate-700">{member.tagName}</span></div>)}</div></section>
@@ -185,7 +200,8 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
           <div className="overflow-x-auto"><div className="min-w-[820px]"><div className="grid grid-cols-[68px_repeat(7,minmax(96px,1fr))] border-b border-slate-200"><div />{dates.map((date, index) => <div key={date} className="border-l border-slate-200 px-2 py-3 text-center text-slate-700"><span className="text-sm font-semibold">{WEEKDAYS[index]}</span><span className="ml-1 font-normal text-slate-400">{formatShortDate(date)}</span>{date === today ? <span className="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">今天</span> : null}</div>)}</div>
             <div className="relative" style={{ height: HOURS.length * CALENDAR_HOUR_HEIGHT }}>
               {HOURS.map((hour) => <div key={hour} className="grid h-20 grid-cols-[68px_repeat(7,minmax(96px,1fr))]"><div className="border-b border-slate-100 px-2 pt-3 text-right text-xs tabular-nums text-slate-400">{String(hour).padStart(2, "0")}:00</div>{dates.map((date) => {
-                return <button key={`${date}-${hour}`} type="button" className="h-20 border-b border-l border-slate-100 bg-white transition hover:bg-blue-50/50 disabled:cursor-wait disabled:bg-slate-50/80" disabled={loading} onClick={() => activeHabit ? void toggleCheckin(activeHabit, date, hour) : setError("请先从左侧选择一个习惯")} aria-label={`${date} ${hour}:00${activeHabit ? ` 打卡 ${activeHabit.title}` : ""}`} />;
+                const outsideActiveRange = Boolean(activeHabit && ((activeHabit.activeFrom && date < activeHabit.activeFrom) || (activeHabit.activeUntil && date > activeHabit.activeUntil)));
+                return <button key={`${date}-${hour}`} type="button" className="h-20 border-b border-l border-slate-100 bg-white transition hover:bg-blue-50/50 disabled:cursor-not-allowed disabled:bg-slate-50/80" disabled={loading || outsideActiveRange} onClick={() => activeHabit ? void toggleCheckin(activeHabit, date, hour) : setError("请先从左侧选择一个习惯")} aria-label={`${date} ${hour}:00${activeHabit ? outsideActiveRange ? ` 不在 ${activeHabit.title} 的执行日期内` : ` 打卡 ${activeHabit.title}` : ""}`} />;
               })}</div>)}
               {checkins.filter((item) => item.startHour !== null && dates.includes(item.date)).map((checkin) => {
                 const habit = habits.find((item) => item.id === checkin.habitId);
@@ -203,18 +219,21 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
       </div>
     </div>
 
-    {draft ? <HabitModal code={data.event.shareCode} identityId={identityId} habit={draft === "new" ? undefined : draft} onClose={() => setDraft(null)} onSaved={(habit) => { setHabits((items) => [...items.filter((item) => item.id !== habit.id), habit].sort((a, b) => a.createdAt.localeCompare(b.createdAt))); setActiveHabitId(habit.id); setDraft(null); }} onDeleted={(id) => { setHabits((items) => items.filter((item) => item.id !== id)); setCheckins((items) => items.filter((item) => item.habitId !== id)); setActiveHabitId((current) => current === id ? null : current); setDraft(null); }} /> : null}
+    {draft ? <HabitModal code={data.event.shareCode} identityId={identityId} today={today} mode={draft === "short-term" ? "short-term" : "regular"} habit={draft === "new" || draft === "short-term" ? undefined : draft} onClose={() => setDraft(null)} onSaved={(habit) => { setHabits((items) => [...items.filter((item) => item.id !== habit.id), habit].sort((a, b) => a.createdAt.localeCompare(b.createdAt))); setActiveHabitId(habit.id); setDraft(null); }} onDeleted={(id) => { setHabits((items) => items.filter((item) => item.id !== id)); setCheckins((items) => items.filter((item) => item.habitId !== id)); setActiveHabitId((current) => current === id ? null : current); setDraft(null); }} /> : null}
   </main>;
 }
 
-function HabitModal({ code, identityId, habit, onClose, onSaved, onDeleted }: {
-  code: string; identityId: string; habit?: Habit; onClose: () => void;
+function HabitModal({ code, identityId, today, mode, habit, onClose, onSaved, onDeleted }: {
+  code: string; identityId: string; today: string; mode: "regular" | "short-term"; habit?: Habit; onClose: () => void;
   onSaved: (habit: Habit) => void; onDeleted: (id: string) => void;
 }) {
+  const shortTerm = Boolean(habit?.activeFrom) || mode === "short-term";
   const [title, setTitle] = useState(habit?.title ?? "");
   const [frequency, setFrequency] = useState<HabitFrequency>(habit?.frequency ?? "daily");
   const [targetCount, setTargetCount] = useState(habit?.targetCount ?? 1);
   const [durationMinutes, setDurationMinutes] = useState<HabitDurationMinutes | null>(habit?.durationMinutes ?? null);
+  const [activeFrom, setActiveFrom] = useState(habit?.activeFrom ?? today);
+  const [activeUntil, setActiveUntil] = useState(habit?.activeUntil ?? addDaysToDateString(today, 6));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -222,7 +241,7 @@ function HabitModal({ code, identityId, habit, onClose, onSaved, onDeleted }: {
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setSaving(true); setError("");
     try {
-      const response = await fetch(`/api/events/${code}/habits`, { method: habit ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identityId, habitId: habit?.id, title, frequency, targetCount, durationMinutes }) });
+      const response = await fetch(`/api/events/${code}/habits`, { method: habit ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identityId, habitId: habit?.id, title, frequency, targetCount, durationMinutes, activeFrom: shortTerm ? activeFrom : null, activeUntil: shortTerm ? activeUntil : null }) });
       const payload = await response.json() as { habit?: Habit; error?: string };
       if (!response.ok || !payload.habit) throw new Error(payload.error ?? "保存习惯失败");
       onSaved(payload.habit);
@@ -238,11 +257,12 @@ function HabitModal({ code, identityId, habit, onClose, onSaved, onDeleted }: {
       onDeleted(habit.id);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "删除习惯失败"); setSaving(false); }
   };
-  return <Modal title={habit ? "编辑习惯" : "添加习惯"} onClose={saving ? () => undefined : onClose}><form className="space-y-5" onSubmit={save}>
+  return <Modal title={habit ? "编辑习惯" : shortTerm ? "添加短期习惯" : "添加习惯"} onClose={saving ? () => undefined : onClose}><form className="space-y-5" onSubmit={save}>
     <div><label htmlFor="habit-title" className="field-label">习惯标题</label><input id="habit-title" className="text-input" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={60} placeholder="例如 背单词" autoFocus /></div>
     <div><span className="field-label">习惯周期</span><div className="grid grid-cols-2 gap-3"><div><label htmlFor="habit-frequency" className="mb-1 block text-xs text-slate-500">周期</label><select id="habit-frequency" className="text-input" value={frequency} onChange={(event) => { const next = event.target.value as HabitFrequency; setFrequency(next); setTargetCount((current) => Math.min(current, HABIT_FREQUENCIES.find((item) => item.value === next)?.max ?? 1)); }}>{HABIT_FREQUENCIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div><div><label htmlFor="habit-count" className="mb-1 block text-xs text-slate-500">次数</label><select id="habit-count" className="text-input" value={targetCount} onChange={(event) => setTargetCount(Number(event.target.value))}>{Array.from({ length: max }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count} 次</option>)}</select></div></div></div>
     <div><label htmlFor="habit-duration" className="field-label">每次时长 <span className="font-normal text-slate-400">（选填）</span></label><select id="habit-duration" className="text-input" value={durationMinutes ?? ""} onChange={(event) => setDurationMinutes(event.target.value ? Number(event.target.value) as HabitDurationMinutes : null)}><option value="">不设置时长</option>{HABIT_DURATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><p className="mt-2 text-xs leading-5 text-slate-500">少于 1 小时按一个时间格显示；1.5 小时起会按实际长度跨格。</p></div>
+    {shortTerm ? <div><span className="field-label">执行日期</span><div className="grid grid-cols-2 gap-3"><div><span className="mb-1 block text-xs text-slate-500">开始</span><DatePicker value={activeFrom} min={habit ? undefined : today} ariaLabel="短期习惯开始日期" onChange={(value) => { setActiveFrom(value); if (activeUntil < value) setActiveUntil(value); }} /></div><div><span className="mb-1 block text-xs text-slate-500">结束</span><DatePicker value={activeUntil} min={activeFrom} align="right" ariaLabel="短期习惯结束日期" onChange={setActiveUntil} /></div></div><p className="mt-2 text-xs leading-5 text-slate-500">结束后会从左侧习惯清单自动隐藏，已经打卡的日历记录不会消失。</p></div> : null}
     {error ? <p className="form-error" role="alert">{error}</p> : null}
-    {confirmDelete ? <div className="rounded-xl border border-red-100 bg-red-50 p-3"><p className="text-sm text-red-700">删除「{habit?.title}」及其全部打卡记录？</p><div className="mt-3 flex gap-2"><button type="button" className="secondary-button flex-1" onClick={() => setConfirmDelete(false)} disabled={saving}>保留</button><button type="button" className="danger-button flex-1" onClick={() => void remove()} disabled={saving}>{saving ? "正在删除" : "确认删除"}</button></div></div> : <div className={`grid gap-3 ${habit ? "grid-cols-[auto_1fr]" : "grid-cols-1"}`}>{habit ? <button type="button" className="secondary-button text-red-600" disabled={saving} onClick={() => setConfirmDelete(true)}><TrashIcon size={16} weight="bold" />删除</button> : null}<button type="submit" className="primary-button" disabled={saving || !title.trim()}>{saving ? "正在保存" : "保存习惯"}</button></div>}
+    {confirmDelete ? <div className="rounded-xl border border-red-100 bg-red-50 p-3"><p className="text-sm text-red-700">删除「{habit?.title}」及其全部打卡记录？</p><div className="mt-3 flex gap-2"><button type="button" className="secondary-button flex-1" onClick={() => setConfirmDelete(false)} disabled={saving}>保留</button><button type="button" className="danger-button flex-1" onClick={() => void remove()} disabled={saving}>{saving ? "正在删除" : "确认删除"}</button></div></div> : <div className={`grid gap-3 ${habit ? "grid-cols-[auto_1fr]" : "grid-cols-1"}`}>{habit ? <button type="button" className="secondary-button text-red-600" disabled={saving} onClick={() => setConfirmDelete(true)}><TrashIcon size={16} weight="bold" />删除</button> : null}<button type="submit" className="primary-button" disabled={saving || !title.trim() || (shortTerm && (!activeFrom || !activeUntil || activeUntil < activeFrom))}>{saving ? "正在保存" : "保存习惯"}</button></div>}
   </form></Modal>;
 }

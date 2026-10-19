@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidDateString } from "@/lib/dates";
+
 export const HABIT_FREQUENCIES = [
   { value: "daily", label: "每天", max: 10 },
   { value: "weekly", label: "每周", max: 7 },
@@ -31,6 +33,15 @@ export const habitFieldsSchema = z.object({
   frequency: z.enum(["daily", "weekly", "half_monthly", "monthly"]),
   targetCount: z.number().int().min(1).max(31),
   durationMinutes: habitDurationSchema,
+  activeFrom: z.string().refine(isValidDateString, "开始日期不正确").nullable().default(null),
+  activeUntil: z.string().refine(isValidDateString, "结束日期不正确").nullable().default(null),
 }).refine((habit) => habit.targetCount <= (HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.max ?? 0), {
   message: "目标次数超过该周期的上限",
+}).refine((habit) => (
+  habit.activeFrom === null && habit.activeUntil === null
+) || (
+  habit.activeFrom !== null && habit.activeUntil !== null && habit.activeFrom <= habit.activeUntil
+), {
+  message: "短期习惯需要完整且正确的日期范围",
+  path: ["activeUntil"],
 });
