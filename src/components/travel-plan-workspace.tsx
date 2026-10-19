@@ -205,9 +205,11 @@ export function TravelPlanWorkspace({
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const [moveError, setMoveError] = useState("");
   const [raisedOverlapItemId, setRaisedOverlapItemId] = useState<string | null>(null);
+  const [copiedStayId, setCopiedStayId] = useState<string | null>(null);
   const dragCandidateRef = useRef<DragCandidate | null>(null);
   const dragTargetRef = useRef<DragTarget | null>(null);
   const suppressClickRef = useRef(false);
+  const stayCopyTimerRef = useRef<number | null>(null);
   const sortedItems = useMemo(
     () => data.itinerary.filter(isScheduledItem).sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour),
     [data.itinerary],
@@ -267,7 +269,20 @@ export function TravelPlanWorkspace({
   useEffect(() => () => {
     const candidate = dragCandidateRef.current;
     if (candidate?.timer) window.clearTimeout(candidate.timer);
+    if (stayCopyTimerRef.current) window.clearTimeout(stayCopyTimerRef.current);
   }, []);
+
+  const copyStayAddress = async (stay: TravelStay) => {
+    if (!stay.address) return;
+    try {
+      await navigator.clipboard.writeText(stay.address);
+      setCopiedStayId(stay.id);
+      if (stayCopyTimerRef.current) window.clearTimeout(stayCopyTimerRef.current);
+      stayCopyTimerRef.current = window.setTimeout(() => setCopiedStayId(null), 1600);
+    } catch {
+      setCopiedStayId(null);
+    }
+  };
 
   const activateDrag = (candidate: DragCandidate, x: number, y: number) => {
     candidate.active = true;
@@ -446,11 +461,21 @@ export function TravelPlanWorkspace({
           </div>
           {data.stays.length ? (
             <div className="flex snap-x gap-3 overflow-x-auto px-4 py-4">
-              {data.stays.map((stay, index) => (
+              {data.stays.map((stay) => (
                 <article key={stay.id} className="group min-w-[250px] max-w-[330px] flex-1 snap-start rounded-2xl border border-blue-100 bg-[#f5f9fe] p-4 text-left transition hover:border-blue-200 hover:bg-[#eef5fc]">
                   <div className="flex items-start justify-between gap-3">
                     <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-blue-600 ring-1 ring-blue-100"><BedIcon size={17} weight="bold" /></span>
-                    <span className="text-[11px] font-semibold text-slate-400">住宿 {index + 1}</span>
+                    {stay.address ? (
+                      <button
+                        type="button"
+                        className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-white hover:text-blue-600 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                        onClick={() => void copyStayAddress(stay)}
+                        aria-label={copiedStayId === stay.id ? "酒店地址已复制" : "复制酒店地址"}
+                        title={copiedStayId === stay.id ? "已复制" : "复制酒店地址"}
+                      >
+                        {copiedStayId === stay.id ? <CheckIcon size={16} weight="bold" className="text-emerald-600" /> : <CopyIcon size={16} weight="bold" />}
+                      </button>
+                    ) : null}
                   </div>
                   {stay.hotelUrl ? (
                     <a href={stay.hotelUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex max-w-full items-center gap-1.5 break-words text-base font-semibold leading-6 text-slate-900 underline decoration-blue-200 underline-offset-4 transition hover:text-blue-600 hover:decoration-blue-500 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" title="打开酒店页面">
