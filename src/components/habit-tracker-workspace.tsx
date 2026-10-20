@@ -183,9 +183,10 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
     </header>
 
     <div className="mx-auto max-w-[1480px] space-y-5 px-4 py-6 sm:px-6">
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200/80 bg-white p-4">
-        <div><p className="flex items-center gap-2 text-sm font-medium text-slate-500"><ClockIcon size={16} weight="bold" />{data.event.isCreator ? <select className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm" value={data.event.timeZone} disabled={timeZoneSaving} onChange={(event) => onTimeZoneChange(event.target.value as EventTimeZone)} aria-label="事件时区">{EVENT_TIME_ZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : EVENT_TIME_ZONE_OPTIONS.find((option) => option.value === data.event.timeZone)?.label}</p><h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">习惯时间表</h2></div>
-        <p className="max-w-md text-xs leading-5 text-slate-500">先在左侧选择一个习惯，再点击时间格完成打卡。设置了时长的习惯会按实际长度显示。</p>
+      <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
+        <p className="flex items-center gap-2 text-sm font-medium text-slate-500"><ClockIcon size={16} weight="bold" />{data.event.isCreator ? <select className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm" value={data.event.timeZone} disabled={timeZoneSaving} onChange={(event) => onTimeZoneChange(event.target.value as EventTimeZone)} aria-label="事件时区">{EVENT_TIME_ZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : EVENT_TIME_ZONE_OPTIONS.find((option) => option.value === data.event.timeZone)?.label}</p>
+        <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">习惯时间表</h2>
+        <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">先在左侧选择一个习惯，再点击时间格完成打卡。设置了时长的习惯会按实际长度显示。</p>
       </section>
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
