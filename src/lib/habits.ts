@@ -23,6 +23,25 @@ export const HABIT_DURATION_OPTIONS = [
 
 export type HabitDurationMinutes = (typeof HABIT_DURATION_OPTIONS)[number]["value"];
 
+export type HabitRecord = {
+  id: string;
+  title: string;
+  frequency: HabitFrequency;
+  targetCount: number;
+  durationMinutes: HabitDurationMinutes | null;
+  activeFrom: string | null;
+  activeUntil: string | null;
+  createdAt: string;
+};
+
+export type HabitCheckin = {
+  id: string;
+  habitId: string;
+  date: string;
+  startHour: number | null;
+  count: number;
+};
+
 const habitDurationSchema = z.union([
   z.literal(10), z.literal(20), z.literal(30), z.literal(60),
   z.literal(90), z.literal(120), z.literal(150),

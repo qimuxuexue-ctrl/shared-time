@@ -15,6 +15,21 @@ const checkinSchema = identity.extend({
   count: z.number().int().min(0).max(31),
   startHour: z.number().int().min(10).max(23).nullable().optional(),
 });
+const habitQuerySchema = identity.extend({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+  from: z.string().refine(isValidDateString, "开始日期不正确").optional(),
+  to: z.string().refine(isValidDateString, "结束日期不正确").optional(),
+  habitId: z.uuid().optional(),
+}).superRefine((value, context) => {
+  const hasRange = Boolean(value.from && value.to);
+  if (!value.month && !hasRange) context.addIssue({ code: "custom", message: "缺少统计日期范围" });
+  if ((value.from && !value.to) || (!value.from && value.to)) context.addIssue({ code: "custom", message: "统计日期范围不完整" });
+  if (value.from && value.to) {
+    if (value.from > value.to) context.addIssue({ code: "custom", message: "统计结束日期不能早于开始日期" });
+    const days = (Date.parse(`${value.to}T00:00:00Z`) - Date.parse(`${value.from}T00:00:00Z`)) / 86_400_000;
+    if (days > 800) context.addIssue({ code: "custom", message: "统计范围不能超过 800 天" });
+  }
+});
 
 async function getContext(code: string, identityId: string) {
   const { data: event, error: eventError } = await supabaseAdmin.from("events")
@@ -74,8 +89,12 @@ function periodRange(date: string, frequency: string) {
 export async function GET(request: Request, route: RouteContext<"/api/events/[code]/habits">) {
   const { code } = await route.params;
   const params = new URL(request.url).searchParams;
-  const parsed = identity.extend({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }).safeParse({
-    identityId: params.get("identityId"), month: params.get("month"),
+  const parsed = habitQuerySchema.safeParse({
+    identityId: params.get("identityId"),
+    month: params.get("month") ?? undefined,
+    from: params.get("from") ?? undefined,
+    to: params.get("to") ?? undefined,
+    habitId: params.get("habitId") ?? undefined,
   });
   if (!parsed.success) return validationError(parsed.error);
   const context = await getContext(code.toUpperCase(), parsed.data.identityId);
@@ -89,12 +108,16 @@ export async function GET(request: Request, route: RouteContext<"/api/events/[co
   const habits = (rows ?? []).map(mapHabit);
   if (!habits.length) return Response.json({ habits, checkins: [] });
 
-  const firstDay = getMondayDateString(`${parsed.data.month}-01`);
-  const lastDay = addDaysToDateString(firstDay, 41);
+  const firstDay = parsed.data.from ?? getMondayDateString(`${parsed.data.month}-01`);
+  const lastDay = parsed.data.to ?? addDaysToDateString(firstDay, 41);
+  const habitIds = parsed.data.habitId
+    ? habits.filter((habit) => habit.id === parsed.data.habitId).map((habit) => habit.id)
+    : habits.map((habit) => habit.id);
+  if (!habitIds.length) return Response.json({ error: "找不到这个习惯" }, { status: 404 });
   const { data: checkins, error: checkinError } = await supabaseAdmin.from("habit_checkins")
     .select("id, habit_id, checkin_date, start_hour, count")
     .eq("member_id", context.member.id)
-    .in("habit_id", habits.map((habit) => habit.id))
+    .in("habit_id", habitIds)
     .gte("checkin_date", firstDay).lte("checkin_date", lastDay);
   if (checkinError) return serverError("读取打卡记录失败");
   return Response.json({ habits, checkins: (checkins ?? []).map((item) => ({ id: item.id, habitId: item.habit_id, date: item.checkin_date, startHour: item.start_hour, count: item.count })) });

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ArrowLeftIcon, CalendarBlankIcon, CaretLeftIcon, CaretRightIcon,
+  ArrowLeftIcon, CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, ChartBarIcon,
   CheckIcon, ClockIcon, CopyIcon, HashIcon, PencilSimpleIcon,
   PlusIcon, SignOutIcon, TrashIcon, UsersThreeIcon,
 } from "@phosphor-icons/react";
@@ -14,26 +14,18 @@ import {
 } from "@/components/duration-calendar-block";
 import { DatePicker } from "@/components/date-picker";
 import { EventPresence } from "@/components/event-presence";
+import { HabitStatisticsModal } from "@/components/habit-statistics-modal";
 import { Modal } from "@/components/modal";
 import { WeekPicker } from "@/components/week-picker";
 import { addDaysToDateString, EVENT_TIME_ZONE_OPTIONS, getDateStringInTimeZone, getMondayDateString } from "@/lib/dates";
 import {
   HABIT_DURATION_OPTIONS, HABIT_FREQUENCIES,
-  type HabitDurationMinutes, type HabitFrequency,
+  type HabitCheckin, type HabitDurationMinutes, type HabitFrequency, type HabitRecord,
 } from "@/lib/habits";
 import type { EventTimeZone, EventWorkspaceData } from "@/lib/types";
 
-type Habit = {
-  id: string;
-  title: string;
-  frequency: HabitFrequency;
-  targetCount: number;
-  durationMinutes: HabitDurationMinutes | null;
-  activeFrom: string | null;
-  activeUntil: string | null;
-  createdAt: string;
-};
-type Checkin = { id: string; habitId: string; date: string; startHour: number | null; count: number };
+type Habit = HabitRecord;
+type Checkin = HabitCheckin;
 
 const HOURS = Array.from({ length: CALENDAR_HOUR_END - CALENDAR_HOUR_START }, (_, index) => index + CALENDAR_HOUR_START);
 const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -91,6 +83,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [activeHabitId, setActiveHabitId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Habit | "new" | "short-term" | null>(null);
+  const [statisticsOpen, setStatisticsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -183,10 +176,9 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
     </header>
 
     <div className="mx-auto max-w-[1480px] space-y-5 px-4 py-6 sm:px-6">
-      <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
-        <p className="flex items-center gap-2 text-sm font-medium text-slate-500"><ClockIcon size={16} weight="bold" />{data.event.isCreator ? <select className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm" value={data.event.timeZone} disabled={timeZoneSaving} onChange={(event) => onTimeZoneChange(event.target.value as EventTimeZone)} aria-label="事件时区">{EVENT_TIME_ZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : EVENT_TIME_ZONE_OPTIONS.find((option) => option.value === data.event.timeZone)?.label}</p>
-        <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">习惯时间表</h2>
-        <p className="mt-2 max-w-md text-xs leading-5 text-slate-500">先在左侧选择一个习惯，再点击时间格完成打卡。设置了时长的习惯会按实际长度显示。</p>
+      <section className="flex items-start justify-between gap-4 rounded-[18px] border border-slate-200/80 bg-white p-4">
+        <div><p className="flex items-center gap-2 text-sm font-medium text-slate-500"><ClockIcon size={16} weight="bold" />{data.event.isCreator ? <select className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm" value={data.event.timeZone} disabled={timeZoneSaving} onChange={(event) => onTimeZoneChange(event.target.value as EventTimeZone)} aria-label="事件时区">{EVENT_TIME_ZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : EVENT_TIME_ZONE_OPTIONS.find((option) => option.value === data.event.timeZone)?.label}</p><h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">习惯时间表</h2><p className="mt-2 max-w-md text-xs leading-5 text-slate-500">先在左侧选择一个习惯，再点击时间格完成打卡。设置了时长的习惯会按实际长度显示。</p></div>
+        <button type="button" className="secondary-button shrink-0" disabled={!habits.length} onClick={() => setStatisticsOpen(true)}><ChartBarIcon size={17} weight="bold" />统计</button>
       </section>
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
@@ -229,6 +221,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
       </div>
     </div>
 
+    {statisticsOpen ? <HabitStatisticsModal code={data.event.shareCode} identityId={identityId} today={today} habits={habits} initialHabitId={activeHabitId} onClose={() => setStatisticsOpen(false)} /> : null}
     {draft ? <HabitModal code={data.event.shareCode} identityId={identityId} today={today} mode={draft === "short-term" ? "short-term" : "regular"} habit={draft === "new" || draft === "short-term" ? undefined : draft} onClose={() => setDraft(null)} onSaved={(habit) => { setHabits((items) => [...items.filter((item) => item.id !== habit.id), habit].sort((a, b) => a.createdAt.localeCompare(b.createdAt))); setActiveHabitId(habit.id); setDraft(null); }} onDeleted={(id) => { setHabits((items) => items.filter((item) => item.id !== id)); setCheckins((items) => items.filter((item) => item.habitId !== id)); setActiveHabitId((current) => current === id ? null : current); setDraft(null); }} /> : null}
   </main>;
 }
