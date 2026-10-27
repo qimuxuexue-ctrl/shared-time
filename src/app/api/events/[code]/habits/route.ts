@@ -1,9 +1,10 @@
 import { z } from "zod";
 
-import { addDaysToDateString, getMondayDateString, isValidDateString } from "@/lib/dates";
+import { addDaysToDateString, getDateStringInTimeZone, getMondayDateString, isValidDateString } from "@/lib/dates";
 import { habitFieldsSchema } from "@/lib/habits";
 import { serverError, validationError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { EventTimeZone } from "@/lib/types";
 
 const identity = z.object({ identityId: z.uuid() });
 const habitSchema = identity.safeExtend(habitFieldsSchema.shape).refine((value) => habitFieldsSchema.safeParse(value).success, { message: "目标次数超过该周期的上限" });
@@ -87,6 +88,13 @@ export async function GET(request: Request, route: RouteContext<"/api/events/[co
   const context = await getContext(code.toUpperCase(), parsed.data.identityId);
   const invalid = invalidContext(context);
   if (invalid || !context) return invalid!;
+
+  const today = getDateStringInTimeZone(context.event.time_zone as EventTimeZone);
+  const { error: cleanupError } = await supabaseAdmin.from("habits").delete()
+    .eq("event_id", context.event.id)
+    .not("active_until", "is", null)
+    .lt("active_until", today);
+  if (cleanupError) return serverError("清理到期习惯失败");
 
   const { data: rows, error: habitError } = await supabaseAdmin.from("habits")
     .select("*")
