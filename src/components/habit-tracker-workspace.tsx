@@ -130,10 +130,6 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
       setError(`「${habit.title}」只能在 ${formatShortDate(habit.activeFrom!)}–${formatShortDate(habit.activeUntil!)} 期间打卡`);
       return;
     }
-    if (!existing && periodProgress(habit, date) >= habit.targetCount) {
-      setError(`「${habit.title}」这个周期已完成 ${habit.targetCount} 次`);
-      return;
-    }
     const visualMinutes = Math.max(60, habit.durationMinutes ?? 60);
     if (!existing && startHour * 60 + visualMinutes > CALENDAR_HOUR_END * 60) {
       setError("该时长会超出当天范围，请选择更早的开始时间");
@@ -163,7 +159,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
     const index = habits.findIndex((item) => item.id === habit.id);
     const selected = habit.id === activeHabitId;
     const durationLabel = HABIT_DURATION_OPTIONS.find((option) => option.value === habit.durationMinutes)?.label;
-    return <div key={habit.id} className={`flex items-center gap-1 rounded-xl border p-1 transition ${selected ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-slate-50"}`}><button type="button" className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left" onClick={() => setActiveHabitId(habit.id)} aria-pressed={selected}><span className={`size-2.5 shrink-0 rounded-full ${HABIT_COLORS[index % HABIT_COLORS.length].dot}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{habit.title}</span><span className="block text-xs text-slate-500">{HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.label} {habit.targetCount} 次{durationLabel ? ` · ${durationLabel}` : ""}</span>{habit.activeFrom && habit.activeUntil ? <span className="mt-0.5 block text-[11px] tabular-nums text-blue-500">{formatShortDate(habit.activeFrom)}–{formatShortDate(habit.activeUntil)}</span> : null}</span><span className="text-xs font-semibold tabular-nums text-blue-600">{Math.min(periodProgress(habit), habit.targetCount)}/{habit.targetCount}</span></button><button type="button" className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-white hover:text-blue-500" onClick={() => setDraft(habit)} aria-label={`编辑${habit.title}`}><PencilSimpleIcon size={13} weight="bold" /></button></div>;
+    return <div key={habit.id} className={`flex items-center gap-1 rounded-xl border p-1 transition ${selected ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-slate-50"}`}><button type="button" className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left" onClick={() => setActiveHabitId(habit.id)} aria-pressed={selected}><span className={`size-2.5 shrink-0 rounded-full ${HABIT_COLORS[index % HABIT_COLORS.length].dot}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{habit.title}</span><span className="block text-xs text-slate-500">{HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.label} {habit.targetCount} 次{durationLabel ? ` · ${durationLabel}` : ""}</span>{habit.activeFrom && habit.activeUntil ? <span className="mt-0.5 block text-[11px] tabular-nums text-blue-500">{formatShortDate(habit.activeFrom)}–{formatShortDate(habit.activeUntil)}</span> : null}</span><span className="text-xs font-semibold tabular-nums text-blue-600">{periodProgress(habit)}/{habit.targetCount}</span></button><button type="button" className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-white hover:text-blue-500" onClick={() => setDraft(habit)} aria-label={`编辑${habit.title}`}><PencilSimpleIcon size={13} weight="bold" /></button></div>;
   })}</div>;
 
   return <main className="min-h-[100dvh] bg-[var(--page)] pb-10">

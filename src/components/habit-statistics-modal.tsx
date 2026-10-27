@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownIcon, ArrowUpIcon, ChartBarIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ArrowUpIcon, CaretDownIcon, ChartBarIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/modal";
@@ -108,7 +108,7 @@ function buildNaturalPeriods(habit: HabitRecord, checkins: HabitCheckin[], range
         end,
         actual,
         target: habit.targetCount,
-        rate: Math.min(100, Math.round((actual / habit.targetCount) * 100)),
+        rate: Math.round((actual / habit.targetCount) * 100),
         ongoing: rawEnd > today,
       });
     }
@@ -139,7 +139,7 @@ function groupPeriods(periods: PeriodStat[], range: RangeKey, frequency: HabitFr
       end: items.at(-1)!.end,
       actual,
       target,
-      rate: target ? Math.min(100, Math.round((actual / target) * 100)) : 0,
+      rate: target ? Math.round((actual / target) * 100) : 0,
       ongoing: items.some((item) => item.ongoing),
     };
   });
@@ -151,7 +151,7 @@ function summarize(periods: PeriodStat[]) {
   return {
     actual,
     target,
-    rate: target ? Math.min(100, Math.round((actual / target) * 100)) : 0,
+    rate: target ? Math.round((actual / target) * 100) : 0,
     completed: periods.filter((item) => item.actual >= item.target).length,
   };
 }
@@ -236,15 +236,17 @@ export function HabitStatisticsModal({ code, identityId, today, habits, initialH
   const totalValue = habit.durationMinutes
     ? formatMinutes((statistics?.current.actual ?? 0) * habit.durationMinutes)
     : `${statistics?.current.actual ?? 0} 次`;
+  const chartMaximum = Math.max(125, Math.ceil(Math.max(...(statistics?.chart.map((item) => item.rate) ?? [0]), 100) / 25) * 25);
+  const targetPosition = (100 / chartMaximum) * 100;
 
   return <Modal title="习惯统计" size="wide" onClose={onClose}>
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div><label htmlFor="statistics-habit" className="field-label">查看习惯</label><select id="statistics-habit" className="text-input" value={habit.id} onChange={(event) => setHabitId(event.target.value)}>{habits.map((item) => <option key={item.id} value={item.id}>{item.title}{item.activeUntil ? " · 短期" : ""}</option>)}</select></div>
+        <div><label htmlFor="statistics-habit" className="field-label">查看习惯</label><div className="relative"><select id="statistics-habit" className="text-input appearance-none pr-12" value={habit.id} onChange={(event) => setHabitId(event.target.value)}>{habits.map((item) => <option key={item.id} value={item.id}>{item.title}{item.activeUntil ? " · 短期" : ""}</option>)}</select><CaretDownIcon size={15} weight="bold" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" /></div></div>
         <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1" aria-label="统计范围">{RANGE_OPTIONS.map((option) => <button key={option.value} type="button" className={`rounded-lg px-2.5 py-2 text-xs font-semibold whitespace-nowrap transition ${range === option.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`} onClick={() => setRange(option.value)} aria-pressed={range === option.value}>{option.label}</button>)}</div>
       </div>
 
-      <p className="text-xs leading-5 text-slate-500">这里只统计你的打卡；完成率会按照“{habit.frequency === "daily" ? "每天" : habit.frequency === "weekly" ? "每周" : habit.frequency === "half_monthly" ? "每半个月" : "每月"} {habit.targetCount} 次”的目标计算。</p>
+      <p className="text-xs leading-5 text-slate-500">这里只统计你的打卡；“{habit.frequency === "daily" ? "每天" : habit.frequency === "weekly" ? "每周" : habit.frequency === "half_monthly" ? "每半个月" : "每月"} {habit.targetCount} 次”是目标，不是上限，超出的完成也会被记录。</p>
 
       {error ? <p className="form-error" role="alert">{error}</p> : loading || !statistics ? <div className="space-y-4" aria-label="正在读取统计"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}</div><div className="h-56 animate-pulse rounded-2xl bg-slate-100" /></div> : <>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -260,15 +262,19 @@ export function HabitStatisticsModal({ code, identityId, today, habits, initialH
         </div>
 
         <section aria-labelledby="habit-chart-title">
-          <div className="flex items-end justify-between gap-3"><div><h3 id="habit-chart-title" className="text-sm font-semibold text-slate-800">周期完成率</h3><p className="mt-1 text-xs text-slate-400">达到 100% 即完成本周期目标</p></div><span className="text-xs tabular-nums text-slate-400">{formatShortDate(ranges.current.from)}–{formatShortDate(ranges.current.to)}</span></div>
-          {statistics.chart.length ? <div className="mt-4 overflow-x-auto pb-1">
-            <div className="relative h-52" style={{ minWidth: statistics.chart.length > 10 ? statistics.chart.length * 38 : "100%" }}>
-              <div className="absolute inset-x-0 top-2 border-t border-dashed border-blue-200"><span className="absolute -top-4 right-0 text-[10px] font-medium text-blue-400">目标 100%</span></div>
-              <div className="absolute inset-x-0 bottom-6 top-2 flex items-end gap-2">{statistics.chart.map((period) => <button key={period.key} type="button" className="group flex h-full min-w-0 flex-1 items-end rounded-t-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={() => setSelectedPeriodKey(period.key)} aria-label={`${period.label}，完成 ${period.actual}/${period.target} 次，${period.rate}%`}><span className={`block w-full rounded-t-md transition-[height,background-color] duration-200 ${period.key === selectedPeriod?.key ? "bg-blue-600" : period.rate >= 100 ? "bg-blue-500" : period.rate > 0 ? "bg-blue-300" : "bg-slate-200"} ${period.ongoing ? "opacity-70" : ""}`} style={{ height: `${Math.max(3, period.rate)}%` }} /></button>)}</div>
-              <div className="absolute inset-x-0 bottom-0 flex gap-2">{statistics.chart.map((period) => <span key={period.key} className={`min-w-0 flex-1 truncate text-center text-[10px] tabular-nums ${period.key === selectedPeriod?.key ? "font-semibold text-blue-700" : "text-slate-400"}`}>{period.label}</span>)}</div>
+          <div className="flex items-end justify-between gap-3"><div><h3 id="habit-chart-title" className="text-sm font-semibold text-slate-800">周期完成率</h3><p className="mt-1 text-xs text-slate-400">柱形可以越过目标线，超过 100% 的部分会完整保留</p></div><span className="text-xs tabular-nums text-slate-400">{formatShortDate(ranges.current.from)}–{formatShortDate(ranges.current.to)}</span></div>
+          {statistics.chart.length ? <div className="mt-4 rounded-2xl bg-slate-50/80 px-3 pb-3 pt-4 sm:px-4">
+            <div className="overflow-x-auto pb-1">
+              <div className="relative h-72" style={{ minWidth: statistics.chart.length > 8 ? statistics.chart.length * 54 : "100%" }}>
+                <div className="absolute inset-x-0 bottom-8 top-5">
+                  <div className="absolute inset-x-0 border-t border-dashed border-blue-300" style={{ bottom: `${targetPosition}%` }}><span className="absolute -top-3 left-0 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-blue-600">目标 100%</span></div>
+                  <div className="absolute inset-0 flex items-end justify-around gap-3 px-1">{statistics.chart.map((period) => <button key={period.key} type="button" className="group flex h-full min-w-8 flex-1 items-end justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2" onClick={() => setSelectedPeriodKey(period.key)} aria-label={`${period.label}，完成 ${period.actual}/${period.target} 次，${period.rate}%`}><span className={`block w-4 rounded-t-[5px] transition-[height,background-color,width] duration-200 group-hover:w-5 sm:w-5 sm:group-hover:w-6 ${period.key === selectedPeriod?.key ? "bg-blue-600" : period.rate >= 100 ? "bg-blue-500" : period.rate > 0 ? "bg-blue-300" : "bg-slate-200"} ${period.ongoing ? "opacity-70" : ""}`} style={{ height: `${Math.max(2, (period.rate / chartMaximum) * 100)}%` }} /></button>)}</div>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 flex justify-around gap-3 px-1">{statistics.chart.map((period) => <span key={period.key} className={`min-w-8 flex-1 truncate text-center text-[10px] tabular-nums ${period.key === selectedPeriod?.key ? "font-semibold text-blue-700" : "text-slate-400"}`}>{period.label}</span>)}</div>
+              </div>
             </div>
           </div> : <div className="mt-4 rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">这个时间范围内还没有可统计的周期。</div>}
-          {selectedPeriod ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2.5 text-xs"><span className="tabular-nums text-slate-500">{formatShortDate(selectedPeriod.start)}–{formatShortDate(selectedPeriod.end)}</span><span className="font-semibold tabular-nums text-slate-800">完成 {selectedPeriod.actual}/{selectedPeriod.target} 次 · {selectedPeriod.rate}%</span></div> : null}
+          {selectedPeriod ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2.5 text-xs"><span className="tabular-nums text-slate-500">{formatShortDate(selectedPeriod.start)}–{formatShortDate(selectedPeriod.end)}</span><span className="font-semibold tabular-nums text-slate-800">完成 {selectedPeriod.actual}/{selectedPeriod.target} 次 · {selectedPeriod.rate}%{selectedPeriod.rate > 100 ? `（超出 ${selectedPeriod.rate - 100}%）` : ""}</span></div> : null}
         </section>
       </>}
     </div>

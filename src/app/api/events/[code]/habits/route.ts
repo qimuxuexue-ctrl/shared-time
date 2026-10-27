@@ -73,19 +73,6 @@ function mapHabit(row: HabitRow) {
   };
 }
 
-function periodRange(date: string, frequency: string) {
-  if (frequency === "daily") return [date, date];
-  if (frequency === "weekly") {
-    const start = getMondayDateString(date);
-    return [start, addDaysToDateString(start, 6)];
-  }
-  const [year, month, day] = date.split("-").map(Number);
-  const prefix = `${year}-${String(month).padStart(2, "0")}-`;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (frequency === "half_monthly") return day <= 15 ? [`${prefix}01`, `${prefix}15`] : [`${prefix}16`, `${prefix}${lastDay}`];
-  return [`${prefix}01`, `${prefix}${lastDay}`];
-}
-
 export async function GET(request: Request, route: RouteContext<"/api/events/[code]/habits">) {
   const { code } = await route.params;
   const params = new URL(request.url).searchParams;
@@ -208,13 +195,6 @@ export async function PATCH(request: Request, route: RouteContext<"/api/events/[
       if ((habit.active_from && parsed.data.date < habit.active_from) || (habit.active_until && parsed.data.date > habit.active_until)) {
         return Response.json({ error: "这一天不在短期习惯的执行日期内" }, { status: 400 });
       }
-      const [periodStart, periodEnd] = periodRange(parsed.data.date, habit.frequency);
-      const { data: periodRows, error: periodError } = await supabaseAdmin.from("habit_checkins")
-        .select("count").eq("habit_id", habit.id).eq("member_id", context.member.id)
-        .gte("checkin_date", periodStart).lte("checkin_date", periodEnd);
-      if (periodError) return serverError("读取打卡进度失败");
-      const completed = (periodRows ?? []).reduce((sum, row) => sum + row.count, 0);
-      if (completed >= habit.target_count) return Response.json({ error: "这个周期的目标次数已经完成" }, { status: 400 });
       const { data: inserted, error } = await supabaseAdmin.from("habit_checkins").insert({
         habit_id: habit.id, member_id: context.member.id, checkin_date: parsed.data.date,
         start_hour: startHour, count: 1,
