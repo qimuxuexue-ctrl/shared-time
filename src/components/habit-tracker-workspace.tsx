@@ -12,6 +12,7 @@ import {
   CALENDAR_HOUR_END, CALENDAR_HOUR_HEIGHT, CALENDAR_HOUR_START,
   DurationCalendarBlock,
 } from "@/components/duration-calendar-block";
+import { CalendarHolidayLabel } from "@/components/calendar-holiday-label";
 import { DatePicker } from "@/components/date-picker";
 import { EventPresence } from "@/components/event-presence";
 import { HabitStatisticsModal } from "@/components/habit-statistics-modal";
@@ -194,7 +195,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
 
         <section className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white" aria-label="习惯周时间表">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3"><div><WeekPicker weekStart={weekStart} currentWeek={getMondayDateString(today)} onWeekChange={(nextWeek) => { setLoading(true); setWeekStart(nextWeek); }} /><p className="mt-1 text-xs text-slate-400">{activeHabit ? `当前：${activeHabit.title}` : "请先添加并选择习惯"}</p></div><div className="flex gap-2"><button type="button" className="icon-button" onClick={() => { setLoading(true); setWeekStart(addDaysToDateString(weekStart, -7)); }} aria-label="上一周"><CaretLeftIcon size={17} weight="bold" /></button><button type="button" className="icon-button" onClick={() => { setLoading(true); setWeekStart(addDaysToDateString(weekStart, 7)); }} aria-label="下一周"><CaretRightIcon size={17} weight="bold" /></button></div></div>
-          <div className="overflow-x-auto"><div className="min-w-[820px]"><div className="grid grid-cols-[68px_repeat(7,minmax(96px,1fr))] border-b border-slate-200"><div />{dates.map((date, index) => <div key={date} className="border-l border-slate-200 px-2 py-3 text-center text-slate-700"><span className="text-sm font-semibold">{WEEKDAYS[index]}</span><span className="ml-1 font-normal text-slate-400">{formatShortDate(date)}</span>{date === today ? <span className="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">今天</span> : null}</div>)}</div>
+          <div className="overflow-x-auto"><div className="min-w-[820px]"><div className="grid grid-cols-[68px_repeat(7,minmax(96px,1fr))] border-b border-slate-200"><div />{dates.map((date, index) => <div key={date} className="border-l border-slate-200 px-2 py-3 text-center text-slate-700"><div><span className="text-sm font-semibold">{WEEKDAYS[index]}</span><span className="ml-1 font-normal text-slate-400">{formatShortDate(date)}</span>{date === today ? <span className="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-semibold text-blue-600">今天</span> : null}</div><CalendarHolidayLabel date={date} timeZone={data.event.timeZone} /></div>)}</div>
             <div className="relative" style={{ height: HOURS.length * CALENDAR_HOUR_HEIGHT }}>
               {HOURS.map((hour) => <div key={hour} className="grid h-20 grid-cols-[68px_repeat(7,minmax(96px,1fr))]"><div className="border-b border-slate-100 px-2 pt-3 text-right text-xs tabular-nums text-slate-400">{String(hour).padStart(2, "0")}:00</div>{dates.map((date) => {
                 const outsideActiveRange = Boolean(activeHabit && ((activeHabit.activeFrom && date < activeHabit.activeFrom) || (activeHabit.activeUntil && date > activeHabit.activeUntil)));

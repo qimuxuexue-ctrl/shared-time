@@ -31,6 +31,7 @@ import {
 } from "react";
 
 import { EventPresence } from "@/components/event-presence";
+import { CalendarHolidayLabel } from "@/components/calendar-holiday-label";
 import { CALENDAR_HOUR_HEIGHT, DurationCalendarBlock } from "@/components/duration-calendar-block";
 import { Modal } from "@/components/modal";
 import { WeekPicker } from "@/components/week-picker";
@@ -690,6 +691,7 @@ export function TravelPlanWorkspace({
                     return <div key={date} className={`border-l border-slate-200 px-2 py-3 text-center ${locked ? "bg-slate-50 text-slate-300" : "text-slate-700"}`}>
                       <div className="flex items-center justify-center gap-1.5 text-sm font-semibold">{DAY_NAMES[index]} <span className="font-normal text-slate-400">{formatShortDate(date)}</span>{locked ? <LockSimpleIcon size={12} weight="bold" /> : null}</div>
                       {tripDay ? <span className="mt-1.5 inline-flex rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">旅行第 {tripDay} 天</span> : null}
+                      <div><CalendarHolidayLabel date={date} timeZone={data.event.timeZone} muted={locked} /></div>
                     </div>;
                   })}
                 </div>

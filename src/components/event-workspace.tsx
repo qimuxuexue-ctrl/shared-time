@@ -31,6 +31,7 @@ import {
 } from "react";
 
 import { DeleteEventModal } from "@/components/delete-event-modal";
+import { CalendarHolidayLabel } from "@/components/calendar-holiday-label";
 import { EventPresence } from "@/components/event-presence";
 import { LoadingRecoveryScreen, LoadingScreen } from "@/components/loading-screen";
 import { Modal } from "@/components/modal";
@@ -2092,6 +2093,7 @@ export function EventWorkspace({ code }: { code: string }) {
                         <span className="font-normal text-slate-400">{formatShortDate(date)}</span>
                         <CaretDownIcon size={13} weight="bold" />
                       </button>
+                      <CalendarHolidayLabel date={date} timeZone={data.event.timeZone} />
                       {openPresetDay === date ? (
                         <PresetMenu date={date} onApply={applyPreset} onClear={clearDay} />
                       ) : null}
