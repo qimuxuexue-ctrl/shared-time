@@ -36,6 +36,14 @@ const HABIT_COLORS = [
   { dot: "bg-emerald-500", idle: "border-emerald-100 bg-emerald-50 text-emerald-800", active: "border-emerald-300 bg-emerald-100 text-emerald-900" },
   { dot: "bg-amber-500", idle: "border-amber-100 bg-amber-50 text-amber-800", active: "border-amber-300 bg-amber-100 text-amber-900" },
   { dot: "bg-violet-500", idle: "border-violet-100 bg-violet-50 text-violet-800", active: "border-violet-300 bg-violet-100 text-violet-900" },
+  { dot: "bg-rose-500", idle: "border-rose-100 bg-rose-50 text-rose-800", active: "border-rose-300 bg-rose-100 text-rose-900" },
+  { dot: "bg-cyan-500", idle: "border-cyan-100 bg-cyan-50 text-cyan-800", active: "border-cyan-300 bg-cyan-100 text-cyan-900" },
+  { dot: "bg-lime-500", idle: "border-lime-100 bg-lime-50 text-lime-800", active: "border-lime-300 bg-lime-100 text-lime-900" },
+  { dot: "bg-indigo-500", idle: "border-indigo-100 bg-indigo-50 text-indigo-800", active: "border-indigo-300 bg-indigo-100 text-indigo-900" },
+  { dot: "bg-orange-500", idle: "border-orange-100 bg-orange-50 text-orange-800", active: "border-orange-300 bg-orange-100 text-orange-900" },
+  { dot: "bg-teal-500", idle: "border-teal-100 bg-teal-50 text-teal-800", active: "border-teal-300 bg-teal-100 text-teal-900" },
+  { dot: "bg-fuchsia-500", idle: "border-fuchsia-100 bg-fuchsia-50 text-fuchsia-800", active: "border-fuchsia-300 bg-fuchsia-100 text-fuchsia-900" },
+  { dot: "bg-sky-500", idle: "border-sky-100 bg-sky-50 text-sky-800", active: "border-sky-300 bg-sky-100 text-sky-900" },
 ];
 
 function periodRange(date: string, frequency: HabitFrequency) {
