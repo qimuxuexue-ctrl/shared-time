@@ -23,8 +23,15 @@ export const HABIT_DURATION_OPTIONS = [
 
 export type HabitDurationMinutes = (typeof HABIT_DURATION_OPTIONS)[number]["value"];
 
+export type HabitGroup = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
 export type HabitRecord = {
   id: string;
+  groupId: string | null;
   title: string;
   frequency: HabitFrequency;
   targetCount: number;
@@ -52,6 +59,7 @@ export const habitFieldsSchema = z.object({
   frequency: z.enum(["daily", "weekly", "half_monthly", "monthly"]),
   targetCount: z.number().int().min(1).max(31),
   durationMinutes: habitDurationSchema,
+  groupId: z.uuid("习惯分组不正确").nullable().default(null),
   activeFrom: z.string().refine(isValidDateString, "开始日期不正确").nullable().default(null),
   activeUntil: z.string().refine(isValidDateString, "结束日期不正确").nullable().default(null),
 }).refine((habit) => habit.targetCount <= (HABIT_FREQUENCIES.find((item) => item.value === habit.frequency)?.max ?? 0), {
@@ -63,4 +71,7 @@ export const habitFieldsSchema = z.object({
 ), {
   message: "短期习惯需要完整且正确的日期范围",
   path: ["activeUntil"],
+}).refine((habit) => habit.activeFrom === null || habit.groupId === null, {
+  message: "短期习惯不能加入分组",
+  path: ["groupId"],
 });
