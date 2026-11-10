@@ -3,10 +3,10 @@
 import {
   ArrowLeftIcon, CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, ChartBarIcon,
   CheckIcon, ClockIcon, CopyIcon, FolderSimpleIcon, HashIcon, PencilSimpleIcon,
-  PlusIcon, SignOutIcon, TrashIcon, UsersThreeIcon,
+  PlusIcon, SignOutIcon, TargetIcon, TrashIcon, TrophyIcon, UsersThreeIcon,
 } from "@phosphor-icons/react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   CALENDAR_HOUR_END, CALENDAR_HOUR_HEIGHT, CALENDAR_HOUR_START,
@@ -15,14 +15,15 @@ import {
 import { CalendarHolidayLabel } from "@/components/calendar-holiday-label";
 import { DatePicker } from "@/components/date-picker";
 import { EventPresence } from "@/components/event-presence";
+import { HabitGoalModal } from "@/components/habit-goal-modal";
 import { HabitGroupManager } from "@/components/habit-group-manager";
 import { HabitStatisticsModal } from "@/components/habit-statistics-modal";
 import { Modal } from "@/components/modal";
 import { WeekPicker } from "@/components/week-picker";
 import { addDaysToDateString, EVENT_TIME_ZONE_OPTIONS, getDateStringInTimeZone, getMondayDateString } from "@/lib/dates";
 import {
-  HABIT_DURATION_OPTIONS, HABIT_FREQUENCIES,
-  type HabitCheckin, type HabitDurationMinutes, type HabitFrequency, type HabitGroup, type HabitRecord,
+  getHabitPeriodRange, HABIT_DURATION_OPTIONS, HABIT_FREQUENCIES,
+  type HabitCheckin, type HabitDurationMinutes, type HabitFrequency, type HabitGoal, type HabitGroup, type HabitRecord,
 } from "@/lib/habits";
 import type { EventTimeZone, EventWorkspaceData } from "@/lib/types";
 
@@ -46,19 +47,6 @@ const HABIT_COLORS = [
   { dot: "bg-sky-500", idle: "border-sky-100 bg-sky-50 text-sky-800", active: "border-sky-300 bg-sky-100 text-sky-900" },
 ];
 
-function periodRange(date: string, frequency: HabitFrequency) {
-  if (frequency === "daily") return [date, date];
-  if (frequency === "weekly") {
-    const start = getMondayDateString(date);
-    return [start, addDaysToDateString(start, 6)];
-  }
-  const [year, month, day] = date.split("-").map(Number);
-  const prefix = `${year}-${String(month).padStart(2, "0")}-`;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (frequency === "half_monthly") return day <= 15 ? [`${prefix}01`, `${prefix}15`] : [`${prefix}16`, `${prefix}${lastDay}`];
-  return [`${prefix}01`, `${prefix}${lastDay}`];
-}
-
 function formatShortDate(date: string) {
   const [, month, day] = date.split("-");
   return `${Number(month)}/${Number(day)}`;
@@ -72,6 +60,14 @@ function formatTimeRange(startHour: number, durationMinutes: number | null) {
 
 function isHabitVisible(habit: Habit, today: string) {
   return habit.activeUntil === null || habit.activeUntil >= today;
+}
+
+async function fetchHabitGoals(code: string, identityId: string) {
+  const query = new URLSearchParams({ identityId });
+  const response = await fetch(`/api/events/${code}/habit-goals?${query}`);
+  const payload = await response.json() as { goals?: HabitGoal[]; error?: string };
+  if (!response.ok || !payload.goals) throw new Error(payload.error ?? "读取目标失败");
+  return payload.goals;
 }
 
 export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving, onCopy, onDelete, onLeave, onEditName, onEditTag, onTimeZoneChange }: {
@@ -91,12 +87,16 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   const dates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDaysToDateString(weekStart, index)), [weekStart]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [groups, setGroups] = useState<HabitGroup[]>([]);
+  const [goals, setGoals] = useState<HabitGoal[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [activeHabitId, setActiveHabitId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Habit | "new" | "short-term" | null>(null);
   const [statisticsOpen, setStatisticsOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [goalDraft, setGoalDraft] = useState<HabitGoal | "new" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [goalsLoading, setGoalsLoading] = useState(true);
+  const [goalsError, setGoalsError] = useState("");
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -106,6 +106,35 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   const ungroupedHabits = useMemo(() => regularHabits.filter((habit) => habit.groupId === null || !groups.some((group) => group.id === habit.groupId)), [groups, regularHabits]);
   const habitCounts = useMemo(() => Object.fromEntries(groups.map((group) => [group.id, regularHabits.filter((habit) => habit.groupId === group.id).length])), [groups, regularHabits]);
   const activeHabit = visibleHabits.find((habit) => habit.id === activeHabitId) ?? null;
+
+  const loadGoals = useCallback(async () => {
+    try {
+      const nextGoals = await fetchHabitGoals(data.event.shareCode, identityId);
+      setGoals(nextGoals);
+      setGoalsError("");
+    } catch (caught) {
+      setGoalsError(caught instanceof Error ? caught.message : "读取目标失败");
+    } finally {
+      setGoalsLoading(false);
+    }
+  }, [data.event.shareCode, identityId]);
+
+  useEffect(() => {
+    let current = true;
+    void fetchHabitGoals(data.event.shareCode, identityId)
+      .then((nextGoals) => {
+        if (!current) return;
+        setGoals(nextGoals);
+        setGoalsError("");
+      })
+      .catch((caught: unknown) => {
+        if (current) setGoalsError(caught instanceof Error ? caught.message : "读取目标失败");
+      })
+      .finally(() => {
+        if (current) setGoalsLoading(false);
+      });
+    return () => { current = false; };
+  }, [data.event.shareCode, identityId]);
 
   useEffect(() => {
     const currentRequest = ++requestId.current;
@@ -132,7 +161,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
   }, [data.event.shareCode, identityId, today, weekStart]);
 
   const periodProgress = (habit: Habit, date = dates.includes(today) ? today : weekStart) => {
-    const [start, end] = periodRange(date, habit.frequency);
+    const [start, end] = getHabitPeriodRange(date, habit.frequency);
     return checkins.filter((item) => item.habitId === habit.id && item.date >= start && item.date <= end)
       .reduce((sum, item) => sum + item.count, 0);
   };
@@ -162,6 +191,7 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
       setCheckins((items) => existing
         ? items.filter((item) => item.id !== existing.id)
         : [...items, { id: payload.id!, habitId: habit.id, date, startHour, count: 1 }]);
+      void loadGoals();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "打卡失败");
     } finally {
@@ -206,6 +236,16 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
             <p className="mt-4 text-xs leading-5 text-slate-400">习惯清单由成员共用；每个人只记录和查看自己的打卡时间。</p>
           </section>
           <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
+            <div className="flex items-center justify-between gap-2"><div className="min-w-0"><h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><TargetIcon size={17} weight="bold" className="text-blue-600" />目标</h2><p className="mt-1 text-xs text-slate-400">让习惯指向想实现的事</p></div><button type="button" className="icon-button shrink-0" disabled={!regularHabits.length} onClick={() => setGoalDraft("new")} aria-label="添加目标" title={regularHabits.length ? "添加目标" : "添加普通习惯后即可设定目标"}><PlusIcon size={18} weight="bold" /></button></div>
+            {goalsLoading ? <div className="mt-4 space-y-2" aria-label="正在读取目标"><div className="h-20 animate-pulse rounded-xl bg-slate-100" /><div className="h-2 animate-pulse rounded-full bg-slate-100" /></div> : goals.length ? <div className="mt-4 space-y-2">{goals.map((goal) => {
+              const achieved = goal.status === "achieved";
+              const paused = goal.status === "paused";
+              return <button key={goal.id} type="button" className={`w-full rounded-xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(51,65,85,0.08)] active:translate-y-0 ${achieved ? "border-emerald-100 bg-emerald-50/70" : paused ? "border-slate-200 bg-slate-50" : "border-blue-100 bg-blue-50/60"}`} onClick={() => setGoalDraft(goal)}><div className="flex items-start gap-2.5"><span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg ${achieved ? "bg-emerald-100 text-emerald-700" : paused ? "bg-slate-200 text-slate-500" : "bg-white text-blue-600 ring-1 ring-blue-100"}`}>{achieved ? <TrophyIcon size={15} weight="fill" /> : <TargetIcon size={15} weight="bold" />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{goal.title}</span><span className="mt-0.5 block text-[11px] text-slate-500">{achieved ? "已实现" : paused ? "已暂停" : goal.targetDate ? `目标日 ${formatShortDate(goal.targetDate)}` : `${goal.habitIds.length} 个关联习惯`}</span></span><span className={`shrink-0 text-sm font-semibold tabular-nums ${achieved ? "text-emerald-700" : paused ? "text-slate-400" : "text-blue-600"}`}>{achieved ? 100 : goal.actionRate}%</span></div><span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-white/90 ring-1 ring-slate-100"><span className={`block h-full rounded-full ${achieved ? "bg-emerald-500" : paused ? "bg-slate-300" : "bg-blue-500"}`} style={{ width: `${achieved ? 100 : goal.actionRate}%` }} /></span></button>;
+            })}</div> : regularHabits.length ? <button type="button" className="mt-4 flex w-full items-center gap-2.5 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 px-3 py-4 text-left transition hover:bg-blue-50 active:scale-[0.99]" onClick={() => setGoalDraft("new")}><span className="grid size-7 shrink-0 place-items-center rounded-full bg-white text-blue-600 ring-1 ring-blue-100"><PlusIcon size={14} weight="bold" /></span><span><span className="block text-xs font-semibold text-blue-700">添加第一个目标</span><span className="mt-0.5 block text-[11px] text-blue-500">把已有习惯关联起来</span></span></button> : <p className="mt-4 rounded-xl bg-slate-50 px-3 py-4 text-xs leading-5 text-slate-400">先添加普通习惯，之后可以随时设定目标。</p>}
+            {goalsError ? <p className="mt-3 text-xs leading-5 text-red-500" role="alert">{goalsError}</p> : null}
+            <p className="mt-4 text-xs leading-5 text-slate-400">目标由成员共用；行动进度按你的打卡记录计算。</p>
+          </section>
+          <section className="rounded-[18px] border border-slate-200/80 bg-white p-4">
             <div className="flex items-center justify-between gap-2"><div><h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><CalendarBlankIcon size={17} weight="bold" className="text-blue-600" />短期习惯</h2><p className="mt-1 text-xs text-slate-400">只在设定日期内执行</p></div><button type="button" className="icon-button" onClick={() => setDraft("short-term")} aria-label="新增短期习惯"><PlusIcon size={18} weight="bold" /></button></div>
             {shortTermHabits.length ? renderHabitCards(shortTermHabits) : <button type="button" className="mt-4 flex w-full items-center gap-2.5 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 px-3 py-4 text-left transition hover:bg-blue-50 active:scale-[0.99]" onClick={() => setDraft("short-term")}><span className="grid size-7 shrink-0 place-items-center rounded-full bg-white text-blue-600 ring-1 ring-blue-100"><PlusIcon size={14} weight="bold" /></span><span><span className="block text-xs font-semibold text-blue-700">添加短期习惯</span><span className="mt-0.5 block text-[11px] text-blue-500">设定一段需要坚持的时间</span></span></button>}
             <p className="mt-4 text-xs leading-5 text-slate-400">结束日期过去后，习惯和打卡记录会自动清除。</p>
@@ -239,7 +279,8 @@ export function HabitTrackerWorkspace({ data, identityId, copied, timeZoneSaving
 
     {statisticsOpen ? <HabitStatisticsModal code={data.event.shareCode} identityId={identityId} today={today} habits={habits} initialHabitId={activeHabitId} onClose={() => setStatisticsOpen(false)} /> : null}
     {groupsOpen ? <HabitGroupManager code={data.event.shareCode} identityId={identityId} groups={groups} habitCounts={habitCounts} onGroupsChange={setGroups} onGroupDeleted={(groupId) => setHabits((items) => items.map((habit) => habit.groupId === groupId ? { ...habit, groupId: null } : habit))} onClose={() => setGroupsOpen(false)} /> : null}
-    {draft ? <HabitModal code={data.event.shareCode} identityId={identityId} today={today} mode={draft === "short-term" ? "short-term" : "regular"} habit={draft === "new" || draft === "short-term" ? undefined : draft} groups={groups} onClose={() => setDraft(null)} onSaved={(habit) => { setHabits((items) => [...items.filter((item) => item.id !== habit.id), habit].sort((a, b) => a.createdAt.localeCompare(b.createdAt))); setActiveHabitId(habit.id); setDraft(null); }} onDeleted={(id) => { setHabits((items) => items.filter((item) => item.id !== id)); setCheckins((items) => items.filter((item) => item.habitId !== id)); setActiveHabitId((current) => current === id ? null : current); setDraft(null); }} /> : null}
+    {goalDraft ? <HabitGoalModal code={data.event.shareCode} identityId={identityId} today={today} habits={regularHabits} goal={goalDraft === "new" ? undefined : goalDraft} onChanged={loadGoals} onClose={() => setGoalDraft(null)} /> : null}
+    {draft ? <HabitModal code={data.event.shareCode} identityId={identityId} today={today} mode={draft === "short-term" ? "short-term" : "regular"} habit={draft === "new" || draft === "short-term" ? undefined : draft} groups={groups} onClose={() => setDraft(null)} onSaved={(habit) => { setHabits((items) => [...items.filter((item) => item.id !== habit.id), habit].sort((a, b) => a.createdAt.localeCompare(b.createdAt))); setActiveHabitId(habit.id); void loadGoals(); setDraft(null); }} onDeleted={(id) => { setHabits((items) => items.filter((item) => item.id !== id)); setCheckins((items) => items.filter((item) => item.habitId !== id)); setActiveHabitId((current) => current === id ? null : current); void loadGoals(); setDraft(null); }} /> : null}
   </main>;
 }
 
